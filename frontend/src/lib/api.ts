@@ -103,6 +103,16 @@ export const api = {
         return authFetch(`${API_URL}/api/scrape?keywords=${encodeURIComponent(keywords)}&location=${encodeURIComponent(location)}&sources=${srcParam}&limit=${limit}&safe_mode=${safeMode}`);
     },
 
+    async getScrapeStatus() {
+        return authFetch(`${API_URL}/api/scrape/status`);
+    },
+
+    async stopScrape() {
+        return authFetch(`${API_URL}/api/scrape/stop`, {
+            method: 'POST'
+        });
+    },
+
     // ─── Settings ───
     async getSettings() {
         return authFetch(`${API_URL}/api/settings`);

@@ -88,19 +88,58 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
+# ──────────────────────────────────────────────
+# GLOBAL SCRAPER STATE
+# ──────────────────────────────────────────────
+SCRAPER_LOGS = []
+SCRAPER_RUNNING = False
+SCRAPER_INTERRUPT = None # Will hold asyncio.Event
+
+@app.get("/api/scrape/status")
+async def scrape_status(current_user: User = Depends(get_current_user)):
+    return {
+        "running": SCRAPER_RUNNING,
+        "logs": SCRAPER_LOGS[-50:] # Return last 50 lines
+    }
+
+@app.post("/api/scrape/stop")
+async def stop_scrape(current_user: User = Depends(get_current_user)):
+    global SCRAPER_INTERRUPT, SCRAPER_RUNNING
+    if SCRAPER_RUNNING and SCRAPER_INTERRUPT:
+        SCRAPER_INTERRUPT.set()
+        log_message("🛑 Stopping scraper by user request...")
+        return {"message": "Stopping scraper..."}
+    return {"message": "Scraper not running"}
+
+def log_message(msg: str):
+    """Add message to global logs"""
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    SCRAPER_LOGS.append(f"[{timestamp}] {msg}")
+    # Keep log size manageable
+    if len(SCRAPER_LOGS) > 200:
+        SCRAPER_LOGS.pop(0)
+
 @app.get("/api/scrape")
 async def scrape(
+    background_tasks: BackgroundTasks,
     keywords: str = "Fullstack Developer",
     location: str = "Indonesia",
     sources: str = "linkedin,upwork,indeed,glints,gmaps",
-    limit: int = 10,
+    limit: int = 10, 
     safe_mode: bool = False,
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    from scraper import JobScraper
-    from models import Lead, Setting
-    from ai_scorer import score_lead
+    global SCRAPER_RUNNING, SCRAPER_INTERRUPT, SCRAPER_LOGS
+    
+    if SCRAPER_RUNNING:
+        return {"message": "Scraper is already running", "status": "running"}
+
+    # Reset State
+    SCRAPER_LOGS.clear()
+    SCRAPER_RUNNING = True
+    SCRAPER_INTERRUPT = asyncio.Event()
     
     # Secret settings from DB (Only for LinkedIn now)
     settings = {s.key: s.value for s in db.query(Setting).all()}
@@ -112,57 +151,85 @@ async def scrape(
     # Parse sources
     source_list = [s.strip().lower() for s in sources.split(",") if s.strip()]
     
+    background_tasks.add_task(
+        run_scraper_task, 
+        keywords, 
+        location, 
+        source_list, 
+        limit, 
+        safe_mode, 
+        li_cookie, 
+        proxy_url, 
+        db,
+        SCRAPER_INTERRUPT
+    )
+
+    return {"message": "Scraping started", "status": "started"}
+
+async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie, proxy, db, interrupt_event):
+    global SCRAPER_RUNNING
+    from scraper import JobScraper
+    from models import Lead
+    from ai_scorer import score_lead
+
+    log_message(f"🚀 Starting background scrape for '{keywords}'")
+    
     scraper = JobScraper(
         headless=True,
-        cookie=li_cookie if li_cookie else None,
-        proxy=proxy_url if proxy_url else None,
-        safe_mode=safe_mode
+        cookie=cookie,
+        proxy=proxy,
+        safe_mode=safe_mode,
+        log_callback=log_message,
+        interrupt_event=interrupt_event
     )
-    print(f"Starting Scrape: {keywords} (Limit: {limit}, Safe: {safe_mode})")
-    results = await scraper.scrape_all(keywords, location, source_list, limit=limit)
     
-    saved_count = 0
-    for item in results:
-        # Check for duplicates
-        existing = db.query(Lead).filter(Lead.url == item['url']).first()
-        if not existing:
-            # Score with AI
-            ai_result = await score_lead(
-                title=item['title'],
-                company=item['company'],
-                description=item.get('description', ''),
-            )
+    try:
+        results = await scraper.scrape_all(keywords, location, sources, limit=limit)
+        
+        saved_count = 0
+        for item in results:
+            if interrupt_event.is_set(): break
             
-            new_lead = Lead(
-                title=item['title'],
-                company=item['company'],
-                location=item['location'],
-                description=item.get('description', ''),
-                url=item['url'],
-                source=item['source'],
-                match_score=ai_result['score'],
-                match_reason=ai_result['reason'],
-                phone=item.get('phone', ''),
-                has_website=item.get('has_website'),
-                status="new",
-            )
-            db.add(new_lead)
-            saved_count += 1
-    
-    db.commit()
-    
-    # Telegram notification for new leads
-    if saved_count > 0:
-        from telegram_notifier import notify_new_leads, is_configured
-        if is_configured():
-            await notify_new_leads(saved_count, ", ".join(source_list))
-    
-    return {
-        "message": f"Scraping complete. Found {len(results)} jobs, saved {saved_count} new.",
-        "saved": saved_count,
-        "total_found": len(results),
-        "data": results,
-    }
+            # Check for duplicates
+            existing = db.query(Lead).filter(Lead.url == item['url']).first()
+            if not existing:
+                # Score with AI
+                ai_result = await score_lead(
+                    title=item['title'],
+                    company=item['company'],
+                    description=item.get('description', ''),
+                )
+                
+                new_lead = Lead(
+                    title=item['title'],
+                    company=item['company'],
+                    location=item['location'],
+                    description=item.get('description', ''),
+                    url=item['url'],
+                    source=item['source'],
+                    match_score=ai_result['score'],
+                    match_reason=ai_result['reason'],
+                    phone=item.get('phone', ''),
+                    has_website=item.get('has_website'),
+                    status="new",
+                )
+                db.add(new_lead)
+                saved_count += 1
+        
+        db.commit()
+        log_message(f"🎉 Scraping finished! Saved {saved_count} new leads.")
+
+        # Telegram notification
+        if saved_count > 0:
+            from telegram_notifier import notify_new_leads, is_configured
+            if is_configured():
+                await notify_new_leads(saved_count, ", ".join(sources))
+                
+    except Exception as e:
+        log_message(f"❌ Error during scraping: {str(e)}")
+    finally:
+        SCRAPER_RUNNING = False
+        log_message("💤 Scraper task ended.")
 
 @app.get("/api/leads")
 async def get_leads(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

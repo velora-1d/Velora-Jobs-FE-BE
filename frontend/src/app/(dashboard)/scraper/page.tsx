@@ -75,6 +75,39 @@ export default function ScraperPage() {
     const [selectedSources, setSelectedSources] = useState<string[]>(['linkedin', 'upwork', 'indeed', 'glints']);
     const [showPresets, setShowPresets] = useState(true);
     const [activePreset, setActivePreset] = useState<string | null>(null);
+    const [logs, setLogs] = useState<string[]>([]);
+    const logsEndRef = React.useRef<HTMLDivElement>(null);
+
+    // Auto-scroll logs
+    React.useEffect(() => {
+        if (logsEndRef.current) {
+            logsEndRef.current.scrollTop = logsEndRef.current.scrollHeight;
+        }
+    }, [logs]);
+
+    // Poll logs when loading
+    React.useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (loading) {
+            interval = setInterval(async () => {
+                try {
+                    const status = await api.getScrapeStatus();
+                    if (status.logs) setLogs(status.logs);
+                    if (!status.running && status.logs.length > 0) {
+                        setLoading(false);
+                        // Check last log for success/error
+                        const lastLog = status.logs[status.logs.length - 1];
+                        if (lastLog.includes("finished") || lastLog.includes("ended")) {
+                            setResult({ message: "Scraping Process Completed." });
+                        }
+                    }
+                } catch (e) {
+                    console.error("Log polling error", e);
+                }
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [loading]);
 
     const toggleSource = (id: string) => {
         setSelectedSources((prev) =>
@@ -93,17 +126,26 @@ export default function ScraperPage() {
         setSafeMode(true);
     };
 
+    const handleStop = async () => {
+        if (!confirm("Are you sure you want to stop the scraper?")) return;
+        try {
+            await api.stopScrape();
+        } catch (e) {
+            alert("Failed to stop scraper");
+        }
+    };
+
     const handleScrape = async (e: React.FormEvent) => {
         e.preventDefault();
         if (selectedSources.length === 0) return;
         setLoading(true);
+        setLogs([]);
         setResult(null);
         try {
-            const data = await api.startScrape(keywords, location, selectedSources, limit, safeMode);
-            setResult(data);
+            // Start the background task
+            await api.startScrape(keywords, location, selectedSources, limit, safeMode);
         } catch (err) {
             alert('Connection Error');
-        } finally {
             setLoading(false);
         }
     };
@@ -298,56 +340,93 @@ export default function ScraperPage() {
                         </div>
                     </div>
 
+                    {/* Removed extra closing div */}
+
                     <div className="pt-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div className="text-slate-600 text-sm font-mono space-y-1">
-                            <p>{selectedSources.length} source{selectedSources.length !== 1 ? 's' : ''} selected</p>
                             {selectedSources.includes('gmaps') && (
                                 <p className="text-red-400/70 text-xs flex items-center gap-1">
                                     <MapPinned className="w-3 h-3" /> Google Maps mode: scrapes local businesses
                                 </p>
                             )}
                         </div>
-                        <button
-                            type="submit"
-                            disabled={loading || selectedSources.length === 0}
-                            className={`
-                relative overflow-hidden group px-10 py-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all
-                ${loading || selectedSources.length === 0
-                                    ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700'
-                                    : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)] border border-blue-400/20'
-                                }
-              `}
-                        >
-                            {loading ? (
-                                <>
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    <span className="tracking-widest font-mono text-sm">SCANNING {selectedSources.length} SOURCES...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Play className="w-5 h-5 fill-current" />
-                                    <span className="tracking-wide">INITIATE SCRAPE</span>
-                                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
-                                </>
-                            )}
-                        </button>
+
+                        {loading ? (
+                            <button
+                                type="button"
+                                onClick={handleStop}
+                                className="px-8 py-4 rounded-xl font-bold flex items-center gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all font-mono tracking-widest text-sm"
+                            >
+                                <span className="relative flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                </span>
+                                STOP SCRAPING
+                            </button>
+                        ) : (
+                            <button
+                                type="submit"
+                                disabled={selectedSources.length === 0}
+                                className={`
+                    relative overflow-hidden group px-10 py-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all
+                    ${selectedSources.length === 0
+                                        ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700'
+                                        : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)] border border-blue-400/20'
+                                    }
+                  `}
+                            >
+                                <Play className="w-5 h-5 fill-current" />
+                                <span className="tracking-wide">INITIATE SCRAPE</span>
+                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
+                            </button>
+                        )}
                     </div>
                 </form>
 
-                {result && (
-                    <div className="mt-10 p-6 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl text-emerald-400 backdrop-blur-md relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-4 opacity-5">
-                            <Globe className="w-32 h-32" />
+                {/* ─── Live Log Terminal ─── */}
+                <div className="mt-10 bg-[#0c0c0c] border border-[#ffffff10] rounded-2xl overflow-hidden shadow-2xl relative">
+                    <div className="flex items-center justify-between px-4 py-2 bg-[#1a1a1a] border-b border-[#ffffff10]">
+                        <div className="flex gap-2">
+                            <div className="w-3 h-3 rounded-full bg-red-500/50" />
+                            <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
+                            <div className="w-3 h-3 rounded-full bg-green-500/50" />
                         </div>
-                        <p className="font-bold flex items-center gap-3 text-lg">
-                            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                            Operation Successful
-                        </p>
-                        <p className="text-slate-400 mt-2 ml-5">
-                            {result.message} <a href="/leads" className="text-white underline underline-offset-4 hover:text-emerald-300 decoration-emerald-500/50">View Leads →</a>
-                        </p>
+                        <span className="text-xs font-mono text-slate-500">velora-scraper-console</span>
                     </div>
-                )}
+
+                    <div
+                        ref={logsEndRef}
+                        className="p-6 h-[300px] overflow-y-auto font-mono text-xs md:text-sm space-y-1 relative"
+                    >
+                        {logs.length === 0 && !loading && (
+                            <div className="absolute inset-0 flex items-center justify-center text-slate-700 pointer-events-none">
+                                <span className="opacity-50">Waiting for scrape command...</span>
+                            </div>
+                        )}
+
+                        {logs.map((log, i) => (
+                            <div key={i} className="text-slate-300 border-l-2 border-transparent pl-2 hover:border-slate-700 hover:bg-white/5 transition-colors">
+                                <span className="text-slate-600 mr-2">{log.substring(0, 10)}</span>
+                                <span className={
+                                    log.includes("ERROR") || log.includes("❌") ? "text-red-400" :
+                                        log.includes("SUCCESS") || log.includes("🎉") ? "text-emerald-400" :
+                                            log.includes("Starting") || log.includes("🚀") ? "text-blue-400" :
+                                                "text-slate-300"
+                                }>
+                                    {log.substring(11)}
+                                </span>
+                            </div>
+                        ))}
+
+                        {loading && (
+                            <div className="animate-pulse text-blue-400 flex items-center gap-2 mt-2">
+                                <span className="w-2 h-4 bg-blue-500 block animate-blink" />
+                                <span>_</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
             </div>
         </div>
     );
