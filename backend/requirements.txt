@@ -13,3 +13,4 @@ passlib[argon2]
 httpx
 gunicorn
 pytz
+python-multipart
