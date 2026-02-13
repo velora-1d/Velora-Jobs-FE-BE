@@ -53,7 +53,28 @@ done
 
 docker compose exec backend alembic upgrade head
 
+# 5. Nginx & SSL Configuration
+echo "🌐 Configuring Nginx & SSL..."
+
+# Install Nginx & Certbot if missing
+if ! command -v nginx &> /dev/null; then
+    sudo apt-get update
+    sudo apt-get install -y nginx certbot python3-certbot-nginx
+fi
+
+# Copy Nginx Config
+sudo cp nginx_velora /etc/nginx/sites-available/jobs.ve-lora.my.id
+sudo ln -sf /etc/nginx/sites-available/jobs.ve-lora.my.id /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# Request SSL (Non-interactive)
+# Only run if certificate doesn't exist
+if [ ! -d "/etc/letsencrypt/live/jobs.ve-lora.my.id" ]; then
+    sudo certbot --nginx -d jobs.ve-lora.my.id --non-interactive --agree-tos -m admin@ve-lora.my.id --redirect
+else
+    echo "✅ SSL Certificate already exists."
+fi
+
 echo "✅ Deployment Complete!"
-echo "   - Frontend: http://localhost:3001"
-echo "   - Backend: http://localhost:8001"
-echo "   - WARP Proxy: socks5://localhost:40000 (Set this in backend/.env if needed)"
+echo "   - Domain: https://jobs.ve-lora.my.id"
+

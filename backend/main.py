@@ -89,7 +89,15 @@ async def health():
     return {"status": "healthy"}
 
 @app.get("/api/scrape")
-async def scrape(keywords: str = "Fullstack Developer", location: str = "Indonesia", sources: str = "linkedin,upwork,indeed,glints,gmaps", db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def scrape(
+    keywords: str = "Fullstack Developer",
+    location: str = "Indonesia",
+    sources: str = "linkedin,upwork,indeed,glints,gmaps",
+    limit: int = 10,
+    safe_mode: bool = False,
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     from scraper import JobScraper
     from models import Lead, Setting
     from ai_scorer import score_lead
@@ -108,8 +116,10 @@ async def scrape(keywords: str = "Fullstack Developer", location: str = "Indones
         headless=True,
         cookie=li_cookie if li_cookie else None,
         proxy=proxy_url if proxy_url else None,
+        safe_mode=safe_mode
     )
-    results = await scraper.scrape_all(keywords, location, source_list)
+    print(f"Starting Scrape: {keywords} (Limit: {limit}, Safe: {safe_mode})")
+    results = await scraper.scrape_all(keywords, location, source_list, limit=limit)
     
     saved_count = 0
     for item in results:

@@ -21,40 +21,41 @@ VIEWPORT = {"width": 1920, "height": 1080}
 
 
 class JobScraper:
-    def __init__(self, headless=True, cookie: str = None, proxy: str = None):
+    def __init__(self, headless=True, cookie: str = None, proxy: str = None, safe_mode: bool = False):
         self.headless = headless
         self.cookie = cookie
         self.proxy = proxy
+        self.safe_mode = safe_mode
 
     async def _launch_browser(self, playwright):
         """Launch a stealth browser instance."""
         launch_opts = {"headless": self.headless}
         if self.proxy:
             launch_opts["proxy"] = {"server": self.proxy}
+        
+        # Slower typing/interaction in safe mode
+        if self.safe_mode:
+            launch_opts["slow_mo"] = 100
+            
         return await playwright.chromium.launch(**launch_opts)
-
-    async def _new_context(self, browser):
-        """Create a browser context with stealth settings."""
-        return await browser.new_context(
-            user_agent=STEALTH_UA,
-            viewport=VIEWPORT,
-        )
 
     async def _scroll_page(self, page, times=3):
         """Scroll page to load lazy content."""
         for _ in range(times):
             await page.evaluate("window.scrollBy(0, 800)")
-            await asyncio.sleep(random.uniform(0.5, 1.2))
+            # Longer random delays for safe mode
+            delay = random.uniform(2.0, 5.0) if self.safe_mode else random.uniform(0.5, 1.2)
+            await asyncio.sleep(delay)
 
     # ──────────────────────────────────────────────
     # MAIN ENTRY POINT
     # ──────────────────────────────────────────────
 
-    async def scrape_all(self, keywords: str, location: str, sources: list = None):
+    async def scrape_all(self, keywords: str, location: str, sources: list = None, limit: int = 10):
         """
         Scrape from all enabled sources.
-        sources: list of source names, e.g. ["linkedin", "upwork", "indeed", "glints"]
-        If None, scrapes all sources.
+        sources: list of source names. If None, scrapes all.
+        limit: Max leads PER SOURCE to retrieve.
         """
         if sources is None:
             sources = ["linkedin", "upwork", "indeed", "glints", "gmaps"]
@@ -73,11 +74,15 @@ class JobScraper:
             if scraper_fn:
                 try:
                     print(f"\n{'='*50}")
-                    print(f"[{source_name.upper()}] Starting scrape...")
+                    print(f"[{source_name.upper()}] Starting scrape (Limit: {limit}, Safe: {self.safe_mode})...")
                     print(f"{'='*50}")
-                    leads = await scraper_fn(keywords, location)
+                    leads = await scraper_fn(keywords, location, limit)
                     all_leads.extend(leads)
                     print(f"[{source_name.upper()}] Got {len(leads)} leads.")
+                    
+                    if self.safe_mode:
+                        await asyncio.sleep(random.uniform(5.0, 10.0))  # Break between sources
+                        
                 except Exception as e:
                     print(f"[{source_name.upper()}] FAILED: {e}")
 
@@ -88,11 +93,11 @@ class JobScraper:
     # 1. LINKEDIN
     # ──────────────────────────────────────────────
 
-    async def scrape_linkedin(self, keywords: str, location: str):
+    async def scrape_linkedin(self, keywords: str, location: str, limit: int = 10):
         leads = []
         async with async_playwright() as p:
             browser = await self._launch_browser(p)
-            context = await self._new_context(browser)
+            context = await browser.new_context(user_agent=STEALTH_UA, viewport=VIEWPORT)
 
             if self.cookie:
                 await context.add_cookies([{
@@ -119,7 +124,7 @@ class JobScraper:
                 await self._scroll_page(page)
                 job_cards = await page.query_selector_all("li")
 
-                for card in job_cards[:15]:
+                for card in job_cards[:limit]:
                     try:
                         title_el = await card.query_selector("h3")
                         company_el = await card.query_selector("h4")
@@ -148,11 +153,11 @@ class JobScraper:
     # 2. UPWORK (International Freelance)
     # ──────────────────────────────────────────────
 
-    async def scrape_upwork(self, keywords: str, location: str = ""):
+    async def scrape_upwork(self, keywords: str, location: str = "", limit: int = 10):
         leads = []
         async with async_playwright() as p:
             browser = await self._launch_browser(p)
-            context = await self._new_context(browser)
+            context = await browser.new_context(user_agent=STEALTH_UA, viewport=VIEWPORT)
             page = await context.new_page()
 
             url = f"https://www.upwork.com/nx/search/jobs/?q={quote(keywords)}&sort=recency"
@@ -172,7 +177,7 @@ class JobScraper:
 
                 print(f"[UPWORK] Found {len(tiles)} tiles.")
 
-                for tile in tiles[:15]:
+                for tile in tiles[:limit]:
                     try:
                         title_el = await tile.query_selector("h2 a, a.up-n-link")
                         desc_el = await tile.query_selector("p, span[data-test='job-description-text']")
@@ -205,11 +210,11 @@ class JobScraper:
     # 3. INDEED (International + Local)
     # ──────────────────────────────────────────────
 
-    async def scrape_indeed(self, keywords: str, location: str):
+    async def scrape_indeed(self, keywords: str, location: str, limit: int = 10):
         leads = []
         async with async_playwright() as p:
             browser = await self._launch_browser(p)
-            context = await self._new_context(browser)
+            context = await browser.new_context(user_agent=STEALTH_UA, viewport=VIEWPORT)
             page = await context.new_page()
 
             url = f"https://www.indeed.com/jobs?q={quote(keywords)}&l={quote(location)}&sort=date"
@@ -226,7 +231,7 @@ class JobScraper:
                 cards = await page.query_selector_all(".job_seen_beacon, .resultContent")
                 print(f"[INDEED] Found {len(cards)} cards.")
 
-                for card in cards[:15]:
+                for card in cards[:limit]:
                     try:
                         title_el = await card.query_selector("h2 a, .jobTitle a")
                         company_el = await card.query_selector("[data-testid='company-name'], .companyName")
@@ -258,11 +263,11 @@ class JobScraper:
     # 4. GLINTS (Southeast Asia / Indonesia)
     # ──────────────────────────────────────────────
 
-    async def scrape_glints(self, keywords: str, location: str = "Indonesia"):
+    async def scrape_glints(self, keywords: str, location: str = "Indonesia", limit: int = 10):
         leads = []
         async with async_playwright() as p:
             browser = await self._launch_browser(p)
-            context = await self._new_context(browser)
+            context = await browser.new_context(user_agent=STEALTH_UA, viewport=VIEWPORT)
             page = await context.new_page()
 
             url = f"https://glints.com/id/opportunities/jobs/explore?keyword={quote(keywords)}&country=ID&sortBy=LATEST"
@@ -279,7 +284,7 @@ class JobScraper:
                 cards = await page.query_selector_all("[class*='JobCard'], [class*='ExploreCard'], a[href*='/opportunities/jobs/']")
                 print(f"[GLINTS] Found {len(cards)} cards.")
 
-                for card in cards[:15]:
+                for card in cards[:limit]:
                     try:
                         title_el = await card.query_selector("h2, [class*='JobTitle'], [class*='job-title']")
                         company_el = await card.query_selector("[class*='CompanyName'], [class*='company-name'], span")
@@ -312,7 +317,11 @@ class JobScraper:
     # 5. GOOGLE MAPS (Local Business Prospecting)
     # ──────────────────────────────────────────────
 
-    async def scrape_gmaps(self, keywords: str, location: str):
+    # ──────────────────────────────────────────────
+    # 5. GOOGLE MAPS (Local Business Prospecting)
+    # ──────────────────────────────────────────────
+
+    async def scrape_gmaps(self, keywords: str, location: str, limit: int = 10):
         """
         Scrape Google Maps for local businesses.
         Great for finding UMKM, Sekolah, Pesantren that need digital services.
@@ -320,7 +329,7 @@ class JobScraper:
         leads = []
         async with async_playwright() as p:
             browser = await self._launch_browser(p)
-            context = await self._new_context(browser)
+            context = await browser.new_context(user_agent=STEALTH_UA, viewport=VIEWPORT)
             page = await context.new_page()
 
             query = f"{keywords} {location}"
@@ -351,7 +360,7 @@ class JobScraper:
 
                 print(f"[GMAPS] Found {len(cards)} listings.")
 
-                for card in cards[:20]:
+                for card in cards[:limit]:
                     try:
                         # Try to get name
                         name_el = await card.query_selector(".qBF1Pd, .fontHeadlineSmall")
@@ -426,6 +435,6 @@ class JobScraper:
 # Testing lokal
 if __name__ == "__main__":
     scraper = JobScraper(headless=False)
-    results = asyncio.run(scraper.scrape_all("Pondok Pesantren", "Jawa Timur", ["gmaps"]))
+    results = asyncio.run(scraper.scrape_all("Pondok Pesantren", "Jawa Timur", ["gmaps"], limit=5))
     for r in results:
         print(f"  [{r['source']}] {r['title']} | {r.get('description', '')}")
