@@ -19,9 +19,9 @@ if ! command -v warp-cli &> /dev/null; then
     
     # Register (Free Mode)
     echo "🔐 Registering WARP..."
-    warp-cli register
-    warp-cli set-mode proxy
-    warp-cli set-proxy-port 40000
+    warp-cli registration new
+    warp-cli mode proxy
+    warp-cli proxy port 40000
     warp-cli connect
     echo "✅ WARP installed and running on port 40000"
 else
