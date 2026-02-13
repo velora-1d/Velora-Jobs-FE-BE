@@ -21,11 +21,23 @@ VIEWPORT = {"width": 1920, "height": 1080}
 
 
 class JobScraper:
-    def __init__(self, headless=True, cookie: str = None, proxy: str = None, safe_mode: bool = False):
+    def __init__(self, headless=True, cookie: str = None, proxy: str = None, safe_mode: bool = False, log_callback=None, interrupt_event=None):
         self.headless = headless
         self.cookie = cookie
         self.proxy = proxy
         self.safe_mode = safe_mode
+        self.log_callback = log_callback
+        self.interrupt_event = interrupt_event
+
+    def _log(self, msg: str):
+        if self.log_callback:
+            self.log_callback(msg)
+        else:
+            print(msg)
+
+    def _check_interrupt(self):
+        if self.interrupt_event and self.interrupt_event.is_set():
+            raise asyncio.CancelledError("Scraper interrupted by user")
 
     async def _launch_browser(self, playwright):
         """Launch a stealth browser instance."""
@@ -70,23 +82,26 @@ class JobScraper:
         }
 
         for source_name in sources:
+            self._check_interrupt()
             scraper_fn = source_map.get(source_name)
             if scraper_fn:
                 try:
-                    print(f"\n{'='*50}")
-                    print(f"[{source_name.upper()}] Starting scrape (Limit: {limit}, Safe: {self.safe_mode})...")
-                    print(f"{'='*50}")
+                    self._log(f"--- [{source_name.upper()}] Starting (Limit: {limit}) ---")
                     leads = await scraper_fn(keywords, location, limit)
                     all_leads.extend(leads)
-                    print(f"[{source_name.upper()}] Got {len(leads)} leads.")
+                    self._log(f"✅ [{source_name.upper()}] Collected {len(leads)} leads.")
                     
                     if self.safe_mode:
-                        await asyncio.sleep(random.uniform(5.0, 10.0))  # Break between sources
+                        self._log(f"⏳ Safe mode: Resting 5-10s...")
+                        await asyncio.sleep(random.uniform(5.0, 10.0))
                         
+                except asyncio.CancelledError:
+                    self._log(f"🛑 Scraper stopped at {source_name.upper()}")
+                    raise
                 except Exception as e:
-                    print(f"[{source_name.upper()}] FAILED: {e}")
+                    self._log(f"❌ [{source_name.upper()}] FAILED: {str(e)}")
 
-        print(f"\n[TOTAL] {len(all_leads)} leads from {len(sources)} sources.")
+        self._log(f"🏁 DONE: Found {len(all_leads)} total leads from {len(sources)} sources.")
         return all_leads
 
     # ──────────────────────────────────────────────
@@ -115,16 +130,21 @@ class JobScraper:
             print(f"[LINKEDIN] {url}")
 
             try:
+                self._log(f"[LINKEDIN] Navigating to search URL...")
                 await page.goto(url, timeout=60000)
                 try:
-                    await page.wait_for_selector(".jobs-search__results-list, .scaffold-layout__list", timeout=15000)
+                    await page.wait_for_selector(".jobs-search__results-list, .scaffold-layout__list, .jobs-search-results-list", timeout=15000)
+                    self._log(f"[LINKEDIN] Page loaded. Parsing cards...")
                 except Exception:
+                    self._log(f"[LINKEDIN] Timeout waiting for selector, trying scroll...")
                     await asyncio.sleep(3)
 
                 await self._scroll_page(page)
                 job_cards = await page.query_selector_all("li")
+                self._log(f"[LINKEDIN] Found {len(job_cards)} potential cards.")
 
-                for card in job_cards[:limit]:
+                for i, card in enumerate(job_cards[:limit]):
+                    self._check_interrupt()
                     try:
                         title_el = await card.query_selector("h3")
                         company_el = await card.query_selector("h4")
@@ -133,8 +153,10 @@ class JobScraper:
                         desc_el = await card.query_selector(".job-search-card__snippet, p")
 
                         if title_el and company_el:
+                            title = (await title_el.inner_text()).strip()
+                            self._log(f"[LINKEDIN] -> Processing: {title}")
                             leads.append({
-                                "title": (await title_el.inner_text()).strip(),
+                                "title": title,
                                 "company": (await company_el.inner_text()).strip(),
                                 "location": (await location_el.inner_text()).strip() if location_el else "Remote",
                                 "url": await link_el.get_attribute("href") if link_el else "",
@@ -144,7 +166,7 @@ class JobScraper:
                     except Exception:
                         continue
             except Exception as e:
-                print(f"[LINKEDIN] Error: {e}")
+                self._log(f"[LINKEDIN] Error: {str(e)}")
 
             await browser.close()
         return leads
@@ -164,27 +186,28 @@ class JobScraper:
             print(f"[UPWORK] {url}")
 
             try:
+                self._log(f"[UPWORK] Navigating to search URL...")
                 await page.goto(url, timeout=60000)
                 try:
-                    await page.wait_for_selector("[data-test='job-tile-list']", timeout=15000)
+                    await page.wait_for_selector("[data-test='job-tile-list'], .up-card-section", timeout=15000)
+                    self._log(f"[UPWORK] Results loaded.")
                 except Exception:
                     await asyncio.sleep(3)
 
                 await self._scroll_page(page)
-                tiles = await page.query_selector_all("article[data-test='SearchResult']")
-                if not tiles:
-                    tiles = await page.query_selector_all("section.up-card-section")
-
-                print(f"[UPWORK] Found {len(tiles)} tiles.")
+                tiles = await page.query_selector_all("article[data-test='SearchResult'], section.up-card-section")
+                self._log(f"[UPWORK] Found {len(tiles)} listings.")
 
                 for tile in tiles[:limit]:
+                    self._check_interrupt()
                     try:
-                        title_el = await tile.query_selector("h2 a, a.up-n-link")
+                        title_el = await tile.query_selector("h2 a, a.up-n-link, [data-test='job-tile-title'] a")
                         desc_el = await tile.query_selector("p, span[data-test='job-description-text']")
                         budget_el = await tile.query_selector("[data-test='budget'], .up-popper-trigger span")
 
                         if title_el:
                             title = (await title_el.inner_text()).strip()
+                            self._log(f"[UPWORK] -> Processing: {title[:40]}...")
                             href = await title_el.get_attribute("href") or ""
                             full_url = f"https://www.upwork.com{href}" if href.startswith("/") else href
                             description = (await desc_el.inner_text()).strip() if desc_el else ""
@@ -201,7 +224,7 @@ class JobScraper:
                     except Exception:
                         continue
             except Exception as e:
-                print(f"[UPWORK] Error: {e}")
+                self._log(f"[UPWORK] Error: {str(e)}")
 
             await browser.close()
         return leads
@@ -337,20 +360,23 @@ class JobScraper:
             print(f"[GMAPS] {url}")
 
             try:
+                self._log(f"[GMAPS] Searching: '{query}'...")
                 await page.goto(url, timeout=60000)
 
                 # Wait for results panel
                 try:
-                    await page.wait_for_selector("div[role='feed'], div.Nv2PK", timeout=15000)
+                    await page.wait_for_selector("div[role='feed'], div.Nv2PK, .fontHeadlineSmall", timeout=15000)
+                    self._log(f"[GMAPS] Results loaded. Scrolling for more...")
                 except Exception:
-                    print("[GMAPS] Waiting for results...")
+                    self._log(f"[GMAPS] Waiting for results to appear...")
                     await asyncio.sleep(5)
 
                 # Scroll the results panel to load more
                 feed = await page.query_selector("div[role='feed']")
                 if feed:
-                    for _ in range(5):
-                        await feed.evaluate("el => el.scrollBy(0, 500)")
+                    for i in range(5):
+                        self._check_interrupt()
+                        await feed.evaluate("el => el.scrollBy(0, 800)")
                         await asyncio.sleep(random.uniform(1.0, 2.0))
 
                 # Grab listing cards
@@ -358,36 +384,39 @@ class JobScraper:
                 if not cards:
                     cards = await page.query_selector_all("a[href*='/maps/place/']")
 
-                print(f"[GMAPS] Found {len(cards)} listings.")
+                self._log(f"[GMAPS] Found {len(cards)} listings.")
 
                 for card in cards[:limit]:
+                    self._check_interrupt()
                     try:
                         # Try to get name
                         name_el = await card.query_selector(".qBF1Pd, .fontHeadlineSmall")
                         if not name_el:
                             name_el = await card.query_selector("span.OSrXXb")
 
-                        # Rating / review count (indicates established business)
-                        rating_el = await card.query_selector(".MW4etd")
-                        review_el = await card.query_selector(".UY7F9")
-
-                        # Address
-                        addr_el = await card.query_selector(".W4Efsd:last-child .W4Efsd span:nth-child(2), .W4Efsd")
-
-                        # Category (e.g., "Pesantren", "Sekolah Dasar")
-                        cat_el = await card.query_selector(".W4Efsd:first-child .W4Efsd span:nth-child(2)")
-
-                        # Phone
-                        phone_el = await card.query_selector("span.UsdlK")
-
-                        # Website link
-                        website_el = await card.query_selector("a[data-value='Website'], a[href*='http']:not([href*='google'])")
-
-                        # Get the Maps link
-                        link_el = await card.query_selector("a.hfpxzc")
-
                         if name_el:
                             name = (await name_el.inner_text()).strip()
+                            self._log(f"[GMAPS] -> Inspecting: {name}")
+
+                            # Rating / review count (indicates established business)
+                            rating_el = await card.query_selector(".MW4etd")
+                            review_el = await card.query_selector(".UY7F9")
+
+                            # Address
+                            addr_el = await card.query_selector(".W4Efsd:last-child .W4Efsd span:nth-child(2), .W4Efsd")
+
+                            # Category (e.g., "Pesantren", "Sekolah Dasar")
+                            cat_el = await card.query_selector(".W4Efsd:first-child .W4Efsd span:nth-child(2)")
+
+                            # Phone
+                            phone_el = await card.query_selector("span.UsdlK")
+
+                            # Website link
+                            website_el = await card.query_selector("a[data-value='Website'], a[href*='http']:not([href*='google'])")
+
+                            # Get the Maps link
+                            link_el = await card.query_selector("a.hfpxzc")
+
                             rating = (await rating_el.inner_text()).strip() if rating_el else ""
                             reviews = (await review_el.inner_text()).strip() if review_el else ""
                             address = (await addr_el.inner_text()).strip() if addr_el else location
@@ -422,7 +451,7 @@ class JobScraper:
                         continue
 
             except Exception as e:
-                print(f"[GMAPS] Error: {e}")
+                self._log(f"[GMAPS] Error: {str(e)}")
 
             await browser.close()
 

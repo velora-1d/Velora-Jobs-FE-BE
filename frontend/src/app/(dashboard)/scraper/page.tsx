@@ -85,26 +85,49 @@ export default function ScraperPage() {
         }
     }, [logs]);
 
+    // Initial check on mount
+    React.useEffect(() => {
+        const checkInitialStatus = async () => {
+            try {
+                const status = await api.getScrapeStatus();
+                if (status.running) {
+                    setLoading(true);
+                    if (status.logs) setLogs(status.logs);
+                }
+            } catch (e) {
+                console.error("Initial status check failed", e);
+            }
+        };
+        checkInitialStatus();
+    }, []);
+
     // Poll logs when loading
     React.useEffect(() => {
         let interval: NodeJS.Timeout;
         if (loading) {
-            interval = setInterval(async () => {
+            // Immediate check
+            const fetchStatus = async () => {
                 try {
                     const status = await api.getScrapeStatus();
                     if (status.logs) setLogs(status.logs);
-                    if (!status.running && status.logs.length > 0) {
+
+                    if (!status.running) {
                         setLoading(false);
                         // Check last log for success/error
-                        const lastLog = status.logs[status.logs.length - 1];
-                        if (lastLog.includes("finished") || lastLog.includes("ended")) {
-                            setResult({ message: "Scraping Process Completed." });
+                        if (status.logs && status.logs.length > 0) {
+                            const lastLog = status.logs[status.logs.length - 1];
+                            if (lastLog.includes("DONE") || lastLog.includes("finished") || lastLog.includes("ended")) {
+                                setResult({ message: "Scraping Process Completed." });
+                            }
                         }
                     }
                 } catch (e) {
                     console.error("Log polling error", e);
                 }
-            }, 1000);
+            };
+
+            fetchStatus();
+            interval = setInterval(fetchStatus, 2000); // 2s is enough for background polling
         }
         return () => clearInterval(interval);
     }, [loading]);
