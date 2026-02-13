@@ -69,6 +69,8 @@ export default function ScraperPage() {
     const [keywords, setKeywords] = useState('Fullstack Developer');
     const [location, setLocation] = useState('Indonesia');
     const [loading, setLoading] = useState(false);
+    const [limit, setLimit] = useState(10);
+    const [safeMode, setSafeMode] = useState(false);
     const [result, setResult] = useState<any>(null);
     const [selectedSources, setSelectedSources] = useState<string[]>(['linkedin', 'upwork', 'indeed', 'glints']);
     const [showPresets, setShowPresets] = useState(true);
@@ -86,6 +88,9 @@ export default function ScraperPage() {
         setLocation(preset.location);
         setSelectedSources(preset.sources);
         setActivePreset(preset.id);
+        // Default safety settings for presets
+        setLimit(10);
+        setSafeMode(true);
     };
 
     const handleScrape = async (e: React.FormEvent) => {
@@ -94,7 +99,7 @@ export default function ScraperPage() {
         setLoading(true);
         setResult(null);
         try {
-            const data = await api.startScrape(keywords, location, selectedSources);
+            const data = await api.startScrape(keywords, location, selectedSources, limit, safeMode);
             setResult(data);
         } catch (err) {
             alert('Connection Error');
@@ -133,8 +138,8 @@ export default function ScraperPage() {
                                     key={preset.id}
                                     onClick={() => applyPreset(preset)}
                                     className={`text-left p-5 rounded-2xl border transition-all hover:scale-[1.02] bg-gradient-to-br ${preset.color} ${activePreset === preset.id
-                                            ? 'ring-2 ring-white/20 shadow-lg'
-                                            : 'hover:shadow-md'
+                                        ? 'ring-2 ring-white/20 shadow-lg'
+                                        : 'hover:shadow-md'
                                         }`}
                                 >
                                     <p className="text-white font-bold text-sm mb-1 flex items-center gap-2">
@@ -187,8 +192,8 @@ export default function ScraperPage() {
                                             type="button"
                                             onClick={() => setKeywords(v)}
                                             className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${keywords === v
-                                                    ? 'bg-blue-500/20 border-blue-500/40 text-blue-300'
-                                                    : 'bg-[#ffffff03] border-[#ffffff08] text-slate-500 hover:text-white hover:border-[#ffffff15]'
+                                                ? 'bg-blue-500/20 border-blue-500/40 text-blue-300'
+                                                : 'bg-[#ffffff03] border-[#ffffff08] text-slate-500 hover:text-white hover:border-[#ffffff15]'
                                                 }`}
                                         >
                                             {v}
@@ -215,6 +220,53 @@ export default function ScraperPage() {
                         </div>
                     </div>
 
+                    {/* ─── Safety & Limit Controls ─── */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-3">
+                            <label className="text-xs font-mono text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                                <Zap className="w-3 h-3 text-amber-400" /> Max Leads per Source
+                            </label>
+                            <div className="relative group">
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="50"
+                                    value={limit}
+                                    onChange={(e) => setLimit(parseInt(e.target.value))}
+                                    className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl py-4 px-6 text-white focus:outline-none focus:border-amber-500/50 focus:bg-[#000000]/60 transition-all placeholder:text-slate-700 text-lg shadow-inner font-mono"
+                                    placeholder="10"
+                                />
+                                <div className="absolute bottom-0 left-0 h-[2px] w-0 bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500 group-focus-within:w-full rounded-b-xl" />
+                            </div>
+                            <p className="text-[10px] text-slate-500 ml-1">Limit scraping to avoid detection (Recommended: 5-10)</p>
+                        </div>
+
+                        <div className="space-y-3">
+                            <label className="text-xs font-mono text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                                <CheckSquare className="w-3 h-3 text-emerald-400" /> Safe Mode
+                            </label>
+                            <div
+                                onClick={() => setSafeMode(!safeMode)}
+                                className={`
+                                    w-full h-[62px] rounded-xl border cursor-pointer transition-all px-4 flex items-center justify-between
+                                    ${safeMode
+                                        ? 'bg-emerald-500/10 border-emerald-500/50 text-white shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                                        : 'bg-[#000000]/40 border-[#ffffff10] text-slate-500 hover:border-[#ffffff20]'
+                                    }
+                                `}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-6 rounded-full relative transition-colors ${safeMode ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${safeMode ? 'translate-x-4' : 'translate-x-0'}`} />
+                                    </div>
+                                    <span className="font-semibold text-sm">Human Behavior Mode</span>
+                                </div>
+                                {safeMode && <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded">ACTIVE</span>}
+                            </div>
+                            <p className="text-[10px] text-slate-500 ml-1">Adds random delays to mimic human interaction (Slower but safer)</p>
+                        </div>
+                    </div>
+
                     {/* Source Selection */}
                     <div className="space-y-3">
                         <label className="text-xs font-mono text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
@@ -230,8 +282,8 @@ export default function ScraperPage() {
                                         type="button"
                                         onClick={() => toggleSource(src.id)}
                                         className={`flex flex-col items-start gap-1 px-4 py-3 rounded-xl border transition-all text-sm font-medium ${isActive
-                                                ? src.color + ' shadow-lg'
-                                                : 'bg-[#ffffff03] border-[#ffffff08] text-slate-600 hover:text-slate-300 hover:border-[#ffffff15]'
+                                            ? src.color + ' shadow-lg'
+                                            : 'bg-[#ffffff03] border-[#ffffff08] text-slate-600 hover:text-slate-300 hover:border-[#ffffff15]'
                                             }`}
                                     >
                                         <div className="flex items-center gap-2 w-full">

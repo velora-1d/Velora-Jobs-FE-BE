@@ -98,9 +98,9 @@ export const api = {
         return authFetch(`${API_URL}/api/leads`);
     },
 
-    async startScrape(keywords: string, location: string = 'Indonesia', sources: string[] = ['linkedin', 'upwork', 'indeed', 'glints', 'gmaps']) {
+    async startScrape(keywords: string, location: string = 'Indonesia', sources: string[] = ['linkedin', 'upwork', 'indeed', 'glints', 'gmaps'], limit: number = 10, safeMode: boolean = false) {
         const srcParam = sources.join(',');
-        return authFetch(`${API_URL}/api/scrape?keywords=${encodeURIComponent(keywords)}&location=${encodeURIComponent(location)}&sources=${srcParam}`);
+        return authFetch(`${API_URL}/api/scrape?keywords=${encodeURIComponent(keywords)}&location=${encodeURIComponent(location)}&sources=${srcParam}&limit=${limit}&safe_mode=${safeMode}`);
     },
 
     // ─── Settings ───
