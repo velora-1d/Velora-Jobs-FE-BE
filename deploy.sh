@@ -45,6 +45,12 @@ docker compose up -d
 
 # 4. Database Migration
 echo "📦 Running Database Migrations..."
+echo "⏳ Waiting for database to be ready..."
+until docker compose exec db pg_isready -U postgres; do
+  echo "Database is unavailable - sleeping"
+  sleep 2
+done
+
 docker compose exec backend alembic upgrade head
 
 echo "✅ Deployment Complete!"
