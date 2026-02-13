@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+playwright
+pydantic
+pydantic-settings
+pandas
+python-dotenv
+sqlalchemy
+psycopg2-binary
+alembic
+python-jose[cryptography]
+passlib[argon2]
+httpx
+gunicorn
+pytz

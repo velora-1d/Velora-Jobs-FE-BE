@@ -1,0 +1,26 @@
+# Environment & Sensitive
+.env
+.env.local
+.env.*.local
+*.env
+backend/.env
+frontend/.env
+.venv/
+env/
+venv/
+node_modules/
+.next/
+*.log
+
+# Python Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+env/
+
+# Docker
+.docker_data/
+
+# OS
+.DS_Store
+Thumbs.db
