@@ -249,9 +249,36 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
         log_message("💤 Scraper task ended.")
 
 @app.get("/api/leads")
-async def get_leads(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_leads(
+    start_date: str = None,
+    end_date: str = None,
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     from models import Lead
-    return db.query(Lead).order_by(Lead.id.desc()).all()
+    from datetime import datetime, time
+
+    query = db.query(Lead)
+
+    if start_date:
+        try:
+            start_dt = datetime.fromisoformat(start_date)
+            # Ensure start of day
+            start_dt = datetime.combine(start_dt.date(), time.min)
+            query = query.filter(Lead.created_at >= start_dt)
+        except ValueError:
+            pass # Ignore invalid date format
+            
+    if end_date:
+        try:
+            end_dt = datetime.fromisoformat(end_date)
+            # Ensure end of day
+            end_dt = datetime.combine(end_dt.date(), time.max)
+            query = query.filter(Lead.created_at <= end_dt)
+        except ValueError:
+            pass
+
+    return query.order_by(Lead.id.desc()).all()
 
 # --- Settings API ---
 

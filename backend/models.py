@@ -18,6 +18,7 @@ class Lead(Base):
     title = Column(String, index=True)
     company = Column(String)
     location = Column(String, nullable=True)
+    email = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     url = Column(String, unique=True)
     source = Column(String)  # e.g., "LinkedIn", "Upwork"

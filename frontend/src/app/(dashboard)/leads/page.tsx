@@ -139,6 +139,7 @@ function StatusBadge({ status }: { status: string }) {
         'contacted': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
         'interested': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
         'rejected': 'bg-red-500/10 text-red-400 border-red-500/20',
+        'won': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
     };
     return (
         <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-widest ${map[status] || map['new']}`}>
@@ -161,7 +162,6 @@ function WAModal({
 }) {
     const [selectedTemplate, setSelectedTemplate] = useState(templates[0]?.id || '');
     const [message, setMessage] = useState('');
-    const [copied, setCopied] = useState(false);
     const [sending, setSending] = useState(false);
     const [sendResult, setSendResult] = useState<{ success: boolean; error?: string } | null>(null);
 
@@ -196,10 +196,9 @@ function WAModal({
     const phone = getPhoneNumber();
     const waPhone = formatPhoneForWA(phone);
 
-    const handleCopy = () => {
-        navigator.clipboard.writeText(message);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+    const handleManualWA = () => {
+        const url = `https://wa.me/${waPhone}?text=${encodeURIComponent(message)}`;
+        window.open(url, '_blank');
     };
 
     const handleSendFonnte = async () => {
@@ -235,33 +234,25 @@ function WAModal({
 
                 {/* Template Selector */}
                 <div className="p-6 border-b border-[#ffffff08]">
-                    <label className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-3 block">Template</label>
                     <div className="flex flex-wrap gap-2">
-                        {templates.map((tpl) => {
-                            const TplIcon = tpl.Icon;
-                            return (
-                                <button
-                                    key={tpl.id}
-                                    onClick={() => setSelectedTemplate(tpl.id)}
-                                    className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all flex items-center gap-2 ${selectedTemplate === tpl.id
-                                            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                                            : 'bg-[#ffffff03] border-[#ffffff08] text-slate-500 hover:text-white'
-                                        }`}
-                                >
-                                    <TplIcon className="w-4 h-4" />
-                                    {tpl.label}
-                                </button>
-                            );
-                        })}
+                        {templates.map((tpl) => (
+                            <button
+                                key={tpl.id}
+                                onClick={() => setSelectedTemplate(tpl.id)}
+                                className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all flex items-center gap-2 ${selectedTemplate === tpl.id
+                                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                                    : 'bg-[#ffffff03] border-[#ffffff08] text-slate-500 hover:text-white'
+                                    }`}
+                            >
+                                <tpl.Icon className="w-4 h-4" />
+                                {tpl.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
                 {/* Message Editor */}
                 <div className="p-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                        <label className="text-xs font-mono text-slate-500 uppercase tracking-widest">Pesan (editable)</label>
-                        <span className="text-[10px] text-slate-600 font-mono">{message.length} chars</span>
-                    </div>
                     <textarea
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
@@ -272,62 +263,38 @@ function WAModal({
                 {/* Send Result Feedback */}
                 {sendResult && (
                     <div className={`mx-6 mb-4 p-4 rounded-xl border text-sm flex items-center gap-3 ${sendResult.success
-                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                            : 'bg-red-500/10 border-red-500/20 text-red-400'
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                        : 'bg-red-500/10 border-red-500/20 text-red-400'
                         }`}>
                         {sendResult.success
-                            ? <><CheckCircle2 className="w-5 h-5 flex-shrink-0" /> Pesan berhasil dikirim via Fonnte! Lead status → Contacted.</>
-                            : <><XCircle className="w-5 h-5 flex-shrink-0" /> Gagal: {sendResult.error || 'Unknown error'}</>
+                            ? <><CheckCircle2 className="w-5 h-5 flex-shrink-0" /> Pesan berhasil dikirim via Fonnte!</>
+                            : <><XCircle className="w-5 h-5 flex-shrink-0" /> Gagal: {sendResult.error}</>
                         }
                     </div>
                 )}
 
-                {/* Actions */}
-                <div className="p-6 border-t border-[#ffffff08] flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    {phone && (
-                        <div className="flex items-center gap-2 text-slate-500 text-xs font-mono">
-                            <Phone className="w-3 h-3" />
-                            {phone}
-                        </div>
-                    )}
-                    <div className="flex-1" />
-
-                    <button
-                        onClick={handleCopy}
-                        className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-[#ffffff10] bg-[#ffffff05] hover:bg-[#ffffff10] text-slate-300 text-sm font-medium transition-all"
-                    >
-                        {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                        {copied ? 'Copied!' : 'Copy'}
-                    </button>
-
+                {/* Dual Actions */}
+                <div className="p-6 border-t border-[#ffffff08] flex items-center justify-end gap-3">
                     {waPhone ? (
-                        <button
-                            onClick={handleSendFonnte}
-                            disabled={sending || (sendResult?.success === true)}
-                            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${sendResult?.success
-                                    ? 'bg-emerald-800/50 text-emerald-500 border border-emerald-500/20 cursor-not-allowed'
-                                    : sending
-                                        ? 'bg-emerald-800/50 text-emerald-300 cursor-wait'
-                                        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.2)]'
-                                }`}
-                        >
-                            {sending ? (
-                                <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>
-                            ) : sendResult?.success ? (
-                                <><Check className="w-4 h-4" /> Terkirim!</>
-                            ) : (
-                                <><Send className="w-4 h-4" /> Kirim via Fonnte</>
-                            )}
-                        </button>
+                        <>
+                            <button
+                                onClick={handleManualWA}
+                                className="flex items-center gap-2 px-5 py-3 rounded-xl border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 font-bold text-sm transition-all"
+                            >
+                                <ExternalLink className="w-4 h-4" />
+                                Manual (WA Web)
+                            </button>
+                            <button
+                                onClick={handleSendFonnte}
+                                disabled={sending || sendResult?.success}
+                                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                Kirim via Fonnte
+                            </button>
+                        </>
                     ) : (
-                        <button
-                            onClick={handleCopy}
-                            className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all"
-                            title="No phone number. Copy and send manually."
-                        >
-                            <Copy className="w-4 h-4" />
-                            Copy & Send Manual
-                        </button>
+                        <p className="text-red-400 text-sm">No phone number available.</p>
                     )}
                 </div>
             </div>
@@ -341,27 +308,66 @@ export default function LeadsPage() {
     const [loading, setLoading] = useState(true);
     const [waLead, setWaLead] = useState<Lead | null>(null);
     const [myName, setMyName] = useState('Mahin');
+
+    // Filtering State
     const [filterSource, setFilterSource] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [showSearch, setShowSearch] = useState(false);
 
+    // Date Filtering
+    const [dateRange, setDateRange] = useState<{ start: string; end: string } | null>(null);
+    const [filterLabel, setFilterLabel] = useState('All Time');
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const [leadsData, settings] = await Promise.all([
+                api.getLeads(dateRange?.start, dateRange?.end),
+                api.getSettings(),
+            ]);
+            setLeads(leadsData);
+            if (settings.user_display_name) setMyName(settings.user_display_name);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [leadsData, settings] = await Promise.all([
-                    api.getLeads(),
-                    api.getSettings(),
-                ]);
-                setLeads(leadsData);
-                if (settings.user_display_name) setMyName(settings.user_display_name);
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchData();
-    }, []);
+    }, [dateRange]); // Refetch when date range changes
+
+    // Quick Date Filters
+    const applyDateFilter = (days: number | 'all') => {
+        if (days === 'all') {
+            setDateRange(null);
+            setFilterLabel('All Time');
+            return;
+        }
+
+        const end = new Date();
+        const start = new Date();
+
+        if (days === 0) {
+            // Today
+            setFilterLabel('Today');
+        } else if (days === 1) {
+            // Yesterday
+            start.setDate(start.getDate() - 1);
+            end.setDate(end.getDate() - 1);
+            setFilterLabel('Yesterday');
+        } else {
+            // Last N days
+            start.setDate(start.getDate() - days);
+            setFilterLabel(`Last ${days} Days`);
+        }
+
+        setDateRange({
+            start: start.toISOString().split('T')[0],
+            end: end.toISOString().split('T')[0]
+        });
+    };
 
     const uniqueSources = ['all', ...Array.from(new Set(leads.map(l => l.source)))];
 
@@ -376,23 +382,24 @@ export default function LeadsPage() {
 
     return (
         <div className="w-full">
-            <div className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="mb-8 flex flex-col xl:flex-row xl:items-end justify-between gap-6">
                 <div>
                     <h1 className="text-4xl font-bold text-white tracking-tight flex items-center gap-3">
                         <Database className="w-8 h-8 text-emerald-400 fill-emerald-400/20" />
                         Leads Database
                     </h1>
                     <p className="text-slate-400 mt-2 text-lg">
-                        {leads.length} leads collected · {filteredLeads.length} shown
+                        {leads.length} leads found · {filterLabel}
                     </p>
                 </div>
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => setShowSearch(!showSearch)}
-                        className={`p-3 glass-panel rounded-xl transition-colors ${showSearch ? 'text-blue-400 border-blue-500/30' : 'text-slate-400 hover:text-white hover:border-[#ffffff20]'}`}
-                    >
-                        <Search className="w-5 h-5" />
-                    </button>
+
+                {/* ─── Hybrid Filter Bar ─── */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="bg-[#ffffff03] p-1 rounded-xl border border-[#ffffff08] flex items-center">
+                        <button onClick={() => applyDateFilter('all')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filterLabel === 'All Time' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>All</button>
+                        <button onClick={() => applyDateFilter(0)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filterLabel === 'Today' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Today</button>
+                        <button onClick={() => applyDateFilter(7)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filterLabel.includes('7 Days') ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>7 Days</button>
+                    </div>
 
                     <div className="relative">
                         <select
@@ -406,6 +413,13 @@ export default function LeadsPage() {
                         </select>
                         <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
+
+                    <button
+                        onClick={() => setShowSearch(!showSearch)}
+                        className={`p-3 glass-panel rounded-xl transition-colors ${showSearch ? 'text-blue-400 border-blue-500/30' : 'text-slate-400 hover:text-white hover:border-[#ffffff20]'}`}
+                    >
+                        <Search className="w-5 h-5" />
+                    </button>
                 </div>
             </div>
 
@@ -427,15 +441,15 @@ export default function LeadsPage() {
                 {loading ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
                         <Loader2 className="w-10 h-10 animate-spin mb-4 text-emerald-400" />
-                        <p className="font-mono text-sm tracking-widest uppercase">Decryption in progress...</p>
+                        <p className="font-mono text-sm tracking-widest uppercase">Loading leads...</p>
                     </div>
                 ) : filteredLeads.length === 0 ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600">
                         <div className="p-4 rounded-full bg-[#ffffff03] mb-4">
                             <Search className="w-8 h-8 opacity-50" />
                         </div>
-                        <p className="text-lg">No data entities found.</p>
-                        <p className="text-sm mt-2 opacity-50">Initiate scan in Scraper Control.</p>
+                        <p className="text-lg">No leads found for this period.</p>
+                        <p className="text-sm mt-2 opacity-50">Try changing the date filter.</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -443,11 +457,9 @@ export default function LeadsPage() {
                             <thead>
                                 <tr className="bg-[#ffffff02] border-b border-[#ffffff05] text-xs font-mono text-slate-500 uppercase tracking-widest">
                                     <th className="px-6 py-5">Target</th>
+                                    <th className="px-6 py-5">Contact</th>
                                     <th className="px-6 py-5">Organization</th>
                                     <th className="px-6 py-5">Location</th>
-                                    <th className="px-6 py-5">
-                                        <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-amber-400" /> Score</span>
-                                    </th>
                                     <th className="px-6 py-5">Source</th>
                                     <th className="px-6 py-5">Status</th>
                                     <th className="px-6 py-5 text-right">Actions</th>
@@ -457,18 +469,31 @@ export default function LeadsPage() {
                                 {filteredLeads.map((lead) => (
                                     <tr key={lead.id} className="hover:bg-[#ffffff03] transition-colors group">
                                         <td className="px-6 py-5">
-                                            <div className="font-medium text-slate-200 group-hover:text-emerald-400 transition-colors max-w-[250px] truncate">{lead.title}</div>
-                                            {lead.description && (
-                                                <div className="text-[10px] text-slate-600 mt-1 max-w-[250px] truncate" title={lead.description}>
-                                                    {lead.description}
+                                            <div className="font-medium text-slate-200 group-hover:text-emerald-400 transition-colors max-w-[200px] truncate">{lead.title}</div>
+                                            {lead.rating && (
+                                                <div className="flex items-center gap-1 mt-1">
+                                                    <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">★ {lead.rating}</span>
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-6 py-5 text-slate-400 max-w-[180px] truncate">{lead.company}</td>
-                                        <td className="px-6 py-5 text-slate-500 max-w-[150px] truncate">{lead.location}</td>
                                         <td className="px-6 py-5">
-                                            <MatchBadge score={lead.match_score} />
+                                            <div className="flex flex-col gap-1">
+                                                {lead.phone ? (
+                                                    <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
+                                                        <Phone className="w-3 h-3" /> {lead.phone}
+                                                    </span>
+                                                ) : <span className="text-xs text-slate-600">-</span>}
+
+                                                {/* Email Column Logic - if added to Lead type later */}
+                                                {(lead as any).email && (
+                                                    <a href={`mailto:${(lead as any).email}`} className="text-xs font-mono text-blue-400 hover:underline flex items-center gap-1">
+                                                        @ {(lead as any).email}
+                                                    </a>
+                                                )}
+                                            </div>
                                         </td>
+                                        <td className="px-6 py-5 text-slate-400 max-w-[150px] truncate">{lead.company}</td>
+                                        <td className="px-6 py-5 text-slate-500 max-w-[120px] truncate">{lead.location}</td>
                                         <td className="px-6 py-5">
                                             <SourceBadge source={lead.source} />
                                         </td>

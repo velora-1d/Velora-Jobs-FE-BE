@@ -94,8 +94,12 @@ async function authFetch(url: string, opts: RequestInit = {}) {
 
 export const api = {
     // ─── Leads ───
-    async getLeads(): Promise<Lead[]> {
-        return authFetch(`${API_URL}/api/leads`);
+    async getLeads(startDate?: string, endDate?: string): Promise<Lead[]> {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate);
+        if (endDate) params.append('end_date', endDate);
+        const queryString = params.toString() ? `?${params.toString()}` : '';
+        return authFetch(`${API_URL}/api/leads${queryString}`);
     },
 
     async startScrape(keywords: string, location: string = 'Indonesia', sources: string[] = ['linkedin', 'upwork', 'indeed', 'glints', 'gmaps'], limit: number = 10, safeMode: boolean = false) {
