@@ -132,7 +132,30 @@ function SourceBadge({ source }: { source: string }) {
     );
 }
 
-// ─── Status Badge ────────────────────────
+// ─── Helper Components ────────────────────────
+
+function MatchBadge({ score }: { score?: number }) {
+    if (!score) return <span className="text-slate-600 text-xs">-</span>;
+    let color = 'text-slate-400 bg-slate-500/10 border-slate-500/20';
+    if (score >= 80) color = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+    else if (score >= 50) color = 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+    else if (score > 0) color = 'text-red-400 bg-red-500/10 border-red-500/20';
+
+    return (
+        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${color}`}>
+            {score}%
+        </span>
+    );
+}
+
+function SourceBadge({ source }: { source: string }) {
+    return (
+        <span className="text-xs font-mono text-slate-500 bg-[#ffffff05] px-2 py-1 rounded border border-[#ffffff05] capitalize">
+            {source}
+        </span>
+    );
+}
+
 function StatusBadge({ status }: { status: string }) {
     const map: Record<string, string> = {
         'new': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -401,6 +424,28 @@ export default function LeadsPage() {
                         <button onClick={() => applyDateFilter(7)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filterLabel.includes('7 Days') ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>7 Days</button>
                     </div>
 
+                    <div className="flex items-center gap-2 bg-[#ffffff03] p-1 rounded-xl border border-[#ffffff08]">
+                        <input
+                            type="date"
+                            className="bg-transparent text-slate-300 text-xs px-2 py-1 focus:outline-none"
+                            onChange={(e) => {
+                                const start = e.target.value;
+                                setDateRange(prev => ({ start, end: prev?.end || start }));
+                                setFilterLabel('Custom');
+                            }}
+                        />
+                        <span className="text-slate-600">-</span>
+                        <input
+                            type="date"
+                            className="bg-transparent text-slate-300 text-xs px-2 py-1 focus:outline-none"
+                            onChange={(e) => {
+                                const end = e.target.value;
+                                setDateRange(prev => ({ start: prev?.start || end, end }));
+                                setFilterLabel('Custom');
+                            }}
+                        />
+                    </div>
+
                     <div className="relative">
                         <select
                             value={filterSource}
@@ -457,7 +502,11 @@ export default function LeadsPage() {
                             <thead>
                                 <tr className="bg-[#ffffff02] border-b border-[#ffffff05] text-xs font-mono text-slate-500 uppercase tracking-widest">
                                     <th className="px-6 py-5">Target</th>
+                                    <th className="px-6 py-5">
+                                        <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-amber-400" /> Score</span>
+                                    </th>
                                     <th className="px-6 py-5">Contact</th>
+                                    <th className="px-6 py-5">Email</th>
                                     <th className="px-6 py-5">Organization</th>
                                     <th className="px-6 py-5">Location</th>
                                     <th className="px-6 py-5">Source</th>
