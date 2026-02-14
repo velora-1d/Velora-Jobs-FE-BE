@@ -3,13 +3,16 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Database, Search, Settings, LogOut, Hexagon, GitBranch } from 'lucide-react';
+import { LayoutDashboard, Database, Search, Settings, LogOut, Hexagon, GitBranch, Calendar, Send, FileText } from 'lucide-react';
 
 const navItems = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Scraper', href: '/scraper', icon: Search },
     { name: 'Leads', href: '/leads', icon: Database },
     { name: 'Pipeline', href: '/pipeline', icon: GitBranch },
+    { name: 'Tasks', href: '/tasks', icon: Calendar },
+    { name: 'Campaigns', href: '/campaigns', icon: Send },
+    { name: 'Documents', href: '/documents', icon: FileText },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
