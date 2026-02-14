@@ -280,6 +280,59 @@ async def get_leads(
 
     return query.order_by(Lead.id.desc()).all()
 
+@app.post("/api/leads")
+async def create_lead(payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Lead
+    
+    lead = Lead(
+        title=payload.get("title", "New Lead"),
+        company=payload.get("company", "Unknown"),
+        location=payload.get("location", ""),
+        description=payload.get("description", ""),
+        url=payload.get("url", ""),
+        source=payload.get("source", "Manual"),
+        status=payload.get("status", "new"),
+        email=payload.get("email"),
+        phone=payload.get("phone"),
+        rating=payload.get("rating"),
+        match_score=payload.get("match_score"),
+    )
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+    return {"id": lead.id, "status": "created"}
+
+@app.put("/api/leads/{lead_id}")
+async def update_lead(lead_id: int, payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Lead
+    
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    for key, value in payload.items():
+        if hasattr(lead, key):
+            setattr(lead, key, value)
+            
+    db.commit()
+    return {"id": lead.id, "status": "updated"}
+
+@app.delete("/api/leads/{lead_id}")
+async def delete_lead(lead_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Lead, FollowUp, Project, Campaign
+    
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+        
+    # Cascade delete related items (optional, but good for cleanup)
+    db.query(FollowUp).filter(FollowUp.lead_id == lead_id).delete()
+    db.query(Project).filter(Project.lead_id == lead_id).delete()
+    
+    db.delete(lead)
+    db.commit()
+    return {"status": "deleted"}
+
 # --- Settings API ---
 
 @app.get("/api/settings")
@@ -454,6 +507,18 @@ async def update_followup(fu_id: int, payload: dict, db: Session = Depends(get_d
     db.commit()
     return {"id": fu.id, "status": "updated"}
 
+@app.delete("/api/followups/{fu_id}")
+async def delete_followup(fu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import FollowUp
+    
+    fu = db.query(FollowUp).filter(FollowUp.id == fu_id).first()
+    if not fu:
+        raise HTTPException(status_code=404, detail="Follow-up not found")
+        
+    db.delete(fu)
+    db.commit()
+    return {"status": "deleted"}
+
 # ═══════════════════════════════════════════════════
 # ──── PROJECT API ────
 # ═══════════════════════════════════════════════════
@@ -540,6 +605,21 @@ async def update_project(project_id: int, payload: dict, db: Session = Depends(g
     
     db.commit()
     return {"id": project.id, "status": "updated"}
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Project, Invoice
+    
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Cascade delete invoices
+    db.query(Invoice).filter(Invoice.project_id == project_id).delete()
+    
+    db.delete(project)
+    db.commit()
+    return {"status": "deleted"}
 
 # ═══════════════════════════════════════════════════
 # ──── INVOICE API ────
@@ -657,6 +737,18 @@ async def update_invoice(inv_id: int, payload: dict, db: Session = Depends(get_d
     db.commit()
     return {"id": inv.id, "status": "updated"}
 
+@app.delete("/api/invoices/{inv_id}")
+async def delete_invoice(inv_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Invoice
+    
+    inv = db.query(Invoice).filter(Invoice.id == inv_id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+        
+    db.delete(inv)
+    db.commit()
+    return {"status": "deleted"}
+
 # ─── Dashboard Stats ───
 
 @app.get("/api/stats")
@@ -760,3 +852,71 @@ async def export_invoices(db: Session = Depends(get_db), current_user: User = De
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=invoices_export.csv"}
     )
+
+# ═══════════════════════════════════════════════════
+# ──── CAMPAIGN API ────
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/campaigns")
+async def get_campaigns(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Campaign
+    return db.query(Campaign).order_by(Campaign.created_at.desc()).all()
+
+@app.post("/api/campaigns")
+async def create_campaign(payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Campaign
+    from datetime import datetime
+    
+    scheduled_at = None
+    if payload.get("scheduled_at"):
+        try:
+            scheduled_at = datetime.fromisoformat(payload["scheduled_at"])
+        except ValueError:
+            pass
+            
+    camp = Campaign(
+        name=payload.get("name", "New Campaign"),
+        status="draft",
+        message_template=payload.get("message_template", ""),
+        target_criteria=payload.get("target_criteria", "{}"),
+        scheduled_at=scheduled_at
+    )
+    db.add(camp)
+    db.commit()
+    db.refresh(camp)
+    db.refresh(camp)
+    return {"id": camp.id, "status": "created"}
+
+@app.put("/api/campaigns/{camp_id}")
+async def update_campaign(camp_id: int, payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Campaign
+    from datetime import datetime
+    
+    camp = db.query(Campaign).filter(Campaign.id == camp_id).first()
+    if not camp:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    if "name" in payload: camp.name = payload["name"]
+    if "status" in payload: camp.status = payload["status"]
+    if "message_template" in payload: camp.message_template = payload["message_template"]
+    if "target_criteria" in payload: camp.target_criteria = payload["target_criteria"]
+    if "scheduled_at" in payload:
+        try:
+            camp.scheduled_at = datetime.fromisoformat(payload["scheduled_at"]) if payload["scheduled_at"] else None
+        except:
+            pass
+            
+    db.commit()
+    return {"id": camp.id, "status": "updated"}
+
+@app.delete("/api/campaigns/{camp_id}")
+async def delete_campaign(camp_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Campaign
+    
+    camp = db.query(Campaign).filter(Campaign.id == camp_id).first()
+    if not camp:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    db.delete(camp)
+    db.commit()
+    return {"status": "deleted"}

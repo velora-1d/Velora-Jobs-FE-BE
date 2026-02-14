@@ -1,20 +1,26 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { api, Lead } from '@/lib/api';
-import { Activity, Users, Zap, Clock, ArrowRight, Sparkles, PieChart, BarChart as BarChartIcon } from 'lucide-react';
+import { api, Lead, Stats } from '@/lib/api';
+import { Activity, Users, Zap, Clock, ArrowRight, Sparkles, PieChart, BarChart as BarChartIcon, Filter } from 'lucide-react';
 import LeadSourceChart from '@/components/analytics/LeadSourceChart';
 import ScoreChart from '@/components/analytics/ScoreChart';
+import FunnelChart from '@/components/analytics/FunnelChart';
 
 export default function Dashboard() {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await api.getLeads();
-        setLeads(data);
+        const [leadsData, statsData] = await Promise.all([
+          api.getLeads(),
+          api.getStats()
+        ]);
+        setLeads(leadsData);
+        setStats(statsData);
       } catch (err) {
         console.error(err);
       } finally {
@@ -53,13 +59,13 @@ export default function Dashboard() {
         <StatCard
           icon={<Zap className="w-6 h-6 text-amber-400" />}
           title="Pending Actions"
-          value="0"
-          subtitle="Queue empty"
+          value={stats?.pending_followups.toString() || "0"}
+          subtitle="Tasks due"
         />
       </div>
 
       {/* Analytics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
         <div className="glass-panel p-6 rounded-3xl">
           <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
             <PieChart className="w-5 h-5 text-blue-400" /> Lead Sources
@@ -71,6 +77,12 @@ export default function Dashboard() {
             <BarChartIcon className="w-5 h-5 text-emerald-400" /> Score Distribution
           </h2>
           <ScoreChart leads={leads} />
+        </div>
+        <div className="glass-panel p-6 rounded-3xl">
+          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+            <Filter className="w-5 h-5 text-amber-400" /> Pipeline Funnel
+          </h2>
+          {stats ? <FunnelChart data={stats} /> : <div className="h-full flex items-center justify-center text-slate-500">Loading...</div>}
         </div>
       </div>
 

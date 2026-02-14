@@ -5,11 +5,12 @@ import { api, Lead } from '@/lib/api';
 import {
     Loader2, ExternalLink, Database, Search, Download, Zap,
     MessageCircle, X, Copy, Check, Send, ChevronDown, Phone,
-    Building2, School, ShoppingBag, Briefcase, CheckCircle2, XCircle
+    Building2, School, ShoppingBag, Briefcase, CheckCircle2, XCircle,
+    Plus, Edit, Trash2, MapPin, Globe, Mail
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-// ─── Pre-built Message Templates ────────────────────────
+// ─── Pre-built Message Templates (Unchanged) ────────────────────────
 const DEFAULT_TEMPLATES = [
     {
         id: 'pesantren',
@@ -86,38 +87,23 @@ Apakah berkenan untuk berdiskusi? Terima kasih. 🙏`,
     },
 ];
 
-// ─── Match Badge Component ────────────────────────
+// ─── Utility Components ────────────────────────
 function MatchBadge({ score }: { score?: number }) {
     if (score === undefined || score === null) {
-        return (
-            <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-slate-500/10 text-slate-500 border border-slate-500/20 uppercase tracking-wider">
-                N/A
-            </span>
-        );
+        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-slate-500/10 text-slate-500 border border-slate-500/20 uppercase tracking-wider">N/A</span>;
     }
-
     let color = 'bg-red-500/10 text-red-400 border-red-500/20';
     let label = 'Low';
-
-    if (score >= 75) {
-        color = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.15)]';
-        label = 'High';
-    } else if (score >= 50) {
-        color = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-        label = 'Mid';
-    }
-
+    if (score >= 75) { color = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'; label = 'High'; }
+    else if (score >= 50) { color = 'bg-amber-500/10 text-amber-400 border-amber-500/20'; label = 'Mid'; }
     return (
         <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${color}`}>
-                {label}
-            </span>
+            <span className={`px-3 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${color}`}>{label}</span>
             <span className="text-[10px] text-slate-600 font-mono">{score}%</span>
         </div>
     );
 }
 
-// ─── Source Badge ────────────────────────
 function SourceBadge({ source }: { source: string }) {
     const colors: Record<string, string> = {
         'LinkedIn': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -125,15 +111,11 @@ function SourceBadge({ source }: { source: string }) {
         'Indeed': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
         'Glints': 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
         'Google Maps': 'bg-red-500/10 text-red-400 border-red-500/20',
+        'Manual': 'bg-slate-500/10 text-slate-300 border-slate-500/20',
     };
-    return (
-        <span className={`px-2 py-1 rounded text-[10px] font-bold border uppercase tracking-wider ${colors[source] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
-            {source}
-        </span>
-    );
+    return <span className={`px-2 py-1 rounded text-[10px] font-bold border uppercase tracking-wider ${colors[source] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>{source}</span>;
 }
 
-// ─── Status Badge ────────────────────────
 function StatusBadge({ status }: { status: string }) {
     const map: Record<string, string> = {
         'new': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -142,32 +124,18 @@ function StatusBadge({ status }: { status: string }) {
         'rejected': 'bg-red-500/10 text-red-400 border-red-500/20',
         'won': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
     };
-    return (
-        <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-widest ${map[status] || map['new']}`}>
-            {status}
-        </span>
-    );
+    return <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-widest ${map[status] || map['new']}`}>{status}</span>;
 }
 
 // ─── WA Outreach Modal ────────────────────────
-function WAModal({
-    lead,
-    onClose,
-    templates,
-    myName
-}: {
-    lead: Lead;
-    onClose: () => void;
-    templates: typeof DEFAULT_TEMPLATES;
-    myName: string;
-}) {
-    const [selectedTemplate, setSelectedTemplate] = useState(templates[0]?.id || '');
+function WAModal({ lead, onClose, templates, myName }: any) {
+    const [selectedTemplate, setSelectedTemplate] = useState('pesantren');
     const [message, setMessage] = useState('');
     const [sending, setSending] = useState(false);
     const [sendResult, setSendResult] = useState<{ success: boolean; error?: string } | null>(null);
 
     useEffect(() => {
-        const tpl = templates.find(t => t.id === selectedTemplate);
+        const tpl = templates.find((t: any) => t.id === selectedTemplate);
         if (tpl) {
             let filled = tpl.message;
             filled = filled.split('{{nama_lead}}').join(lead.title);
@@ -176,7 +144,7 @@ function WAModal({
             filled = filled.split('{{company}}').join(lead.company);
             setMessage(filled);
         }
-    }, [selectedTemplate, lead, myName, templates]);
+    }, [selectedTemplate, lead, myName]);
 
     const getPhoneNumber = () => {
         const ph = lead.phone || '';
@@ -186,118 +154,129 @@ function WAModal({
         }
         return ph.replace(/[\s\-()]/g, '');
     };
-
-    const formatPhoneForWA = (p: string) => {
-        let num = p.replace(/[^\d+]/g, '');
-        if (num.startsWith('0')) num = '62' + num.slice(1);
-        if (num.startsWith('+')) num = num.slice(1);
-        return num;
-    };
-
     const phone = getPhoneNumber();
-    const waPhone = formatPhoneForWA(phone);
-
-    const handleManualWA = () => {
-        const url = `https://wa.me/${waPhone}?text=${encodeURIComponent(message)}`;
-        window.open(url, '_blank');
-    };
+    const waPhone = phone.replace(/[^\d+]/g, '').replace(/^0/, '62').replace(/^\+/, '');
 
     const handleSendFonnte = async () => {
         if (!waPhone || !message) return;
         setSending(true);
-        setSendResult(null);
         try {
             const result = await api.sendWA(waPhone, message, lead.id);
             setSendResult(result);
-        } catch {
-            setSendResult({ success: false, error: 'Network error' });
-        } finally {
-            setSending(false);
-        }
+        } catch { setSendResult({ success: false, error: 'Network error' }); }
+        finally { setSending(false); }
     };
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-[#0f1117] border border-[#ffffff10] rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                {/* Header */}
+            <div className="bg-[#0f1117] border border-[#ffffff10] rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between p-6 border-b border-[#ffffff08]">
-                    <div>
-                        <h3 className="text-white font-bold text-lg flex items-center gap-2">
-                            <MessageCircle className="w-5 h-5 text-emerald-400" />
-                            Outreach — {lead.title}
-                        </h3>
-                        <p className="text-slate-500 text-xs mt-1 font-mono">{lead.company} · {lead.location}</p>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-[#ffffff10] rounded-xl transition-colors">
-                        <X className="w-5 h-5 text-slate-400" />
-                    </button>
+                    <h3 className="text-white font-bold text-lg flex items-center gap-2"><MessageCircle className="w-5 h-5 text-emerald-400" /> Outreach — {lead.title}</h3>
+                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
                 </div>
-
-                {/* Template Selector */}
                 <div className="p-6 border-b border-[#ffffff08]">
                     <div className="flex flex-wrap gap-2">
-                        {templates.map((tpl) => (
-                            <button
-                                key={tpl.id}
-                                onClick={() => setSelectedTemplate(tpl.id)}
-                                className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all flex items-center gap-2 ${selectedTemplate === tpl.id
-                                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                                    : 'bg-[#ffffff03] border-[#ffffff08] text-slate-500 hover:text-white'
-                                    }`}
-                            >
-                                <tpl.Icon className="w-4 h-4" />
-                                {tpl.label}
-                            </button>
+                        {templates.map((tpl: any) => (
+                            <button key={tpl.id} onClick={() => setSelectedTemplate(tpl.id)} className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${selectedTemplate === tpl.id ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-[#ffffff03] border-[#ffffff08] text-slate-500'}`}>{tpl.label}</button>
                         ))}
                     </div>
                 </div>
-
-                {/* Message Editor */}
-                <div className="p-6 space-y-4">
-                    <textarea
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        className="w-full h-48 bg-black/40 border border-[#ffffff10] rounded-xl p-4 text-sm text-slate-200 focus:outline-none focus:border-emerald-500/40 resize-none font-mono leading-relaxed"
-                    />
+                <div className="p-6">
+                    <textarea value={message} onChange={e => setMessage(e.target.value)} className="w-full h-48 bg-black/40 border border-[#ffffff10] rounded-xl p-4 text-sm text-slate-200 focus:border-emerald-500/40 resize-none font-mono" />
                 </div>
+                {sendResult && <div className={`mx-6 mb-4 p-4 rounded-xl border text-sm ${sendResult.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>{sendResult.success ? 'Success!' : sendResult.error}</div>}
+                <div className="p-6 border-t border-[#ffffff08] flex justify-end gap-3">
+                    <button onClick={() => window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(message)}`, '_blank')} className="px-5 py-3 rounded-xl border border-emerald-500/30 text-emerald-400 text-sm font-bold">Manual WA</button>
+                    <button onClick={handleSendFonnte} disabled={sending || !waPhone} className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg disabled:opacity-50">{sending ? <Loader2 className="animate-spin" /> : 'Send via Fonnte'}</button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
-                {/* Send Result Feedback */}
-                {sendResult && (
-                    <div className={`mx-6 mb-4 p-4 rounded-xl border text-sm flex items-center gap-3 ${sendResult.success
-                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                        : 'bg-red-500/10 border-red-500/20 text-red-400'
-                        }`}>
-                        {sendResult.success
-                            ? <><CheckCircle2 className="w-5 h-5 flex-shrink-0" /> Pesan berhasil dikirim via Fonnte!</>
-                            : <><XCircle className="w-5 h-5 flex-shrink-0" /> Gagal: {sendResult.error}</>
-                        }
+// ─── Lead Form Modal ────────────────────────
+function LeadModal({ lead, onClose, onSave }: { lead?: Lead | null, onClose: () => void, onSave: (data: Partial<Lead>) => void }) {
+    const [formData, setFormData] = useState<Partial<Lead>>({
+        title: '', company: '', location: '', status: 'new',
+        email: '', phone: '', source: 'Manual', url: '', description: ''
+    });
+
+    useEffect(() => {
+        if (lead) setFormData(lead);
+    }, [lead]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave(formData);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-[#0f1117] border border-[#ffffff10] rounded-2xl w-full max-w-3xl shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                <div className="p-6 border-b border-[#ffffff08] flex justify-between items-center">
+                    <h2 className="text-xl font-bold text-white">{lead ? 'Edit Lead' : 'Add New Lead'}</h2>
+                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400" /></button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs text-slate-500 uppercase tracking-widest block mb-2">Lead Name / Title</label>
+                            <input name="title" value={formData.title} onChange={handleChange} className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl px-4 py-3 text-slate-200 focus:border-blue-500/50 outline-none" required />
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-500 uppercase tracking-widest block mb-2">Company / Organization</label>
+                            <input name="company" value={formData.company} onChange={handleChange} className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl px-4 py-3 text-slate-200 focus:border-blue-500/50 outline-none" required />
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-500 uppercase tracking-widest block mb-2">Email</label>
+                            <input name="email" value={formData.email || ''} onChange={handleChange} className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl px-4 py-3 text-slate-200 focus:border-blue-500/50 outline-none" />
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-500 uppercase tracking-widest block mb-2">Phone</label>
+                            <input name="phone" value={formData.phone || ''} onChange={handleChange} className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl px-4 py-3 text-slate-200 focus:border-blue-500/50 outline-none" />
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-500 uppercase tracking-widest block mb-2">Location</label>
+                            <input name="location" value={formData.location || ''} onChange={handleChange} className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl px-4 py-3 text-slate-200 focus:border-blue-500/50 outline-none" />
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-500 uppercase tracking-widest block mb-2">Website / URL</label>
+                            <input name="url" value={formData.url || ''} onChange={handleChange} className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl px-4 py-3 text-slate-200 focus:border-blue-500/50 outline-none" />
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-500 uppercase tracking-widest block mb-2">Source</label>
+                            <select name="source" value={formData.source} onChange={handleChange} className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl px-4 py-3 text-slate-200 focus:border-blue-500/50 outline-none">
+                                <option value="Manual" className="bg-[#0f1117]">Manual Input</option>
+                                <option value="LinkedIn" className="bg-[#0f1117]">LinkedIn</option>
+                                <option value="Google Maps" className="bg-[#0f1117]">Google Maps</option>
+                                <option value="Upwork" className="bg-[#0f1117]">Upwork</option>
+                                <option value="Instagram" className="bg-[#0f1117]">Instagram</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-500 uppercase tracking-widest block mb-2">Status</label>
+                            <select name="status" value={formData.status} onChange={handleChange} className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl px-4 py-3 text-slate-200 focus:border-blue-500/50 outline-none">
+                                <option value="new" className="bg-[#0f1117]">New</option>
+                                <option value="contacted" className="bg-[#0f1117]">Contacted</option>
+                                <option value="interested" className="bg-[#0f1117]">Interested</option>
+                                <option value="won" className="bg-[#0f1117]">Won</option>
+                                <option value="rejected" className="bg-[#0f1117]">Rejected</option>
+                            </select>
+                        </div>
                     </div>
-                )}
-
-                {/* Dual Actions */}
-                <div className="p-6 border-t border-[#ffffff08] flex items-center justify-end gap-3">
-                    {waPhone ? (
-                        <>
-                            <button
-                                onClick={handleManualWA}
-                                className="flex items-center gap-2 px-5 py-3 rounded-xl border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 font-bold text-sm transition-all"
-                            >
-                                <ExternalLink className="w-4 h-4" />
-                                Manual (WA Web)
-                            </button>
-                            <button
-                                onClick={handleSendFonnte}
-                                disabled={sending || sendResult?.success}
-                                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                                Kirim via Fonnte
-                            </button>
-                        </>
-                    ) : (
-                        <p className="text-red-400 text-sm">No phone number available.</p>
-                    )}
-                </div>
+                    <div>
+                        <label className="text-xs text-slate-500 uppercase tracking-widest block mb-2">Description / Notes</label>
+                        <textarea name="description" value={formData.description || ''} onChange={handleChange} className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl px-4 py-3 text-slate-200 focus:border-blue-500/50 outline-none h-24 resize-none" />
+                    </div>
+                    <div className="flex justify-end pt-4">
+                        <button type="button" onClick={onClose} className="px-6 py-2.5 text-slate-400 hover:text-white mr-2">Cancel</button>
+                        <button type="submit" className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20">Save Lead</button>
+                    </div>
+                </form>
             </div>
         </div>
     );
@@ -308,16 +287,15 @@ export default function LeadsPage() {
     const [leads, setLeads] = useState<Lead[]>([]);
     const [loading, setLoading] = useState(true);
     const [waLead, setWaLead] = useState<Lead | null>(null);
+    const [editLead, setEditLead] = useState<Lead | null>(null);
+    const [showCreateModal, setShowCreateModal] = useState(false);
     const [myName, setMyName] = useState('Mahin');
 
-    // Filtering State
-    const [filterSource, setFilterSource] = useState<string>('all');
-    const [filterScore, setFilterScore] = useState<string>('all');
+    const [filterSource, setFilterSource] = useState('all');
+    const [filterScore, setFilterScore] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [showSearch, setShowSearch] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
-
-    // Date Filtering
     const [dateRange, setDateRange] = useState<{ start: string; end: string } | null>(null);
     const [filterLabel, setFilterLabel] = useState('All Time');
 
@@ -330,116 +308,51 @@ export default function LeadsPage() {
             ]);
             setLeads(leadsData);
             if (settings.user_display_name) setMyName(settings.user_display_name);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
+        } catch (err) { console.error(err); }
+        finally { setLoading(false); }
     };
 
-    useEffect(() => {
-        fetchData();
-    }, [dateRange]); // Refetch when date range changes
+    useEffect(() => { fetchData(); }, [dateRange]);
 
-    // Quick Date Filters
     const applyDateFilter = (days: number | 'all') => {
-        if (days === 'all') {
-            setDateRange(null);
-            setFilterLabel('All Time');
-            return;
-        }
-
+        if (days === 'all') { setDateRange(null); setFilterLabel('All Time'); return; }
         const end = new Date();
         const start = new Date();
-
-        if (days === 0) {
-            // Today
-            setFilterLabel('Today');
-        } else if (days === 1) {
-            // Yesterday
-            start.setDate(start.getDate() - 1);
-            end.setDate(end.getDate() - 1);
-            setFilterLabel('Yesterday');
-        } else {
-            // Last N days
-            start.setDate(start.getDate() - days);
-            setFilterLabel(`Last ${days} Days`);
-        }
-
-        setDateRange({
-            start: start.toISOString().split('T')[0],
-            end: end.toISOString().split('T')[0]
-        });
+        if (days === 0) setFilterLabel('Today');
+        else if (days === 1) { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); setFilterLabel('Yesterday'); }
+        else { start.setDate(start.getDate() - days); setFilterLabel(`Last ${days} Days`); }
+        setDateRange({ start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] });
     };
 
-    const uniqueSources = ['all', ...Array.from(new Set(leads.map(l => l.source)))];
-
-    const handleExport = (type: string) => {
-        if (!type || type === 'default') return;
-        setIsExporting(true);
-
+    const handleCreate = async (data: Partial<Lead>) => {
         try {
-            const data = filteredLeads.map(l => ({
-                Title: l.title,
-                Company: l.company,
-                Phone: l.phone,
-                Email: l.email || '',
-                Score: l.match_score || 0,
-                Rating: l.rating || '',
-                Location: l.location,
-                Source: l.source,
-                Status: l.status,
-                URL: l.url
-            }));
+            await api.createLead(data);
+            setShowCreateModal(false);
+            fetchData();
+        } catch (e) { alert('Failed to create lead'); }
+    };
 
-            const dateStr = new Date().toISOString().split('T')[0];
-            let blob: Blob;
-            let filename: string;
+    const handleUpdate = async (data: Partial<Lead>) => {
+        if (!editLead) return;
+        try {
+            await api.updateLead(editLead.id, data);
+            setEditLead(null);
+            fetchData();
+        } catch (e) { alert('Failed to update lead'); }
+    };
 
-            if (type === 'excel') {
-                const ws = XLSX.utils.json_to_sheet(data);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Leads");
-                const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                filename = `leads_export_${dateStr}.xlsx`;
-            } else {
-                // CSV
-                const ws = XLSX.utils.json_to_sheet(data);
-                const csv = XLSX.utils.sheet_to_csv(ws);
-                // Add BOM for Excel compatibility
-                blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-                filename = `leads_export_${dateStr}.csv`;
-            }
-
-            // Native download
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', filename);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error("Export failed:", error);
-            alert("Export failed. Please try again.");
-        } finally {
-            setIsExporting(false);
-        }
+    const handleDelete = async (id: number) => {
+        if (!confirm('Area you sure you want to delete this lead? This will also remove related Projects and Tasks.')) return;
+        try {
+            await api.deleteLead(id);
+            fetchData();
+        } catch (e) { alert('Failed to delete lead'); }
     };
 
     const filteredLeads = leads.filter(lead => {
         const matchSource = filterSource === 'all' || lead.source === filterSource;
-        const matchScore = filterScore === 'all' ||
-            (filterScore === 'high' && (lead.match_score || 0) >= 75) ||
-            (filterScore === 'mid' && (lead.match_score || 0) >= 50 && (lead.match_score || 0) < 75) ||
-            (filterScore === 'low' && (lead.match_score || 0) < 50);
-
-        const matchSearch = !searchQuery ||
-            lead.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            lead.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            lead.location.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchScore = filterScore === 'all' || (filterScore === 'high' && (lead.match_score || 0) >= 75) || (filterScore === 'mid' && (lead.match_score || 0) >= 50 && (lead.match_score || 0) < 75) || (filterScore === 'low' && (lead.match_score || 0) < 50);
+        const matchSearch = !searchQuery || lead.title.toLowerCase().includes(searchQuery.toLowerCase()) || lead.company.toLowerCase().includes(searchQuery.toLowerCase()) || lead.location.toLowerCase().includes(searchQuery.toLowerCase());
         return matchSource && matchScore && matchSearch;
     });
 
@@ -448,143 +361,45 @@ export default function LeadsPage() {
             <div className="mb-8 flex flex-col xl:flex-row xl:items-end justify-between gap-6">
                 <div>
                     <h1 className="text-4xl font-bold text-white tracking-tight flex items-center gap-3">
-                        <Database className="w-8 h-8 text-emerald-400 fill-emerald-400/20" />
-                        Leads Database
+                        <Database className="w-8 h-8 text-emerald-400" /> Leads Database
                     </h1>
-                    <p className="text-slate-400 mt-2 text-lg">
-                        {leads.length} leads found · {filterLabel}
-                    </p>
+                    <p className="text-slate-400 mt-2 text-lg">{leads.length} leads found · {filterLabel}</p>
                 </div>
-
-                {/* ─── Hybrid Filter Bar ─── */}
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="bg-[#ffffff03] p-1 rounded-xl border border-[#ffffff08] flex items-center">
                         <button onClick={() => applyDateFilter('all')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filterLabel === 'All Time' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>All</button>
                         <button onClick={() => applyDateFilter(0)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filterLabel === 'Today' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Today</button>
                         <button onClick={() => applyDateFilter(7)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filterLabel.includes('7 Days') ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>7 Days</button>
                     </div>
-
-                    <div className="flex items-center gap-2 bg-[#ffffff03] p-1 rounded-xl border border-[#ffffff08]">
-                        <input
-                            type="date"
-                            className="bg-transparent text-slate-300 text-xs px-2 py-1 focus:outline-none"
-                            onChange={(e) => {
-                                const start = e.target.value;
-                                setDateRange(prev => ({ start, end: prev?.end || start }));
-                                setFilterLabel('Custom');
-                            }}
-                        />
-                        <span className="text-slate-600">-</span>
-                        <input
-                            type="date"
-                            className="bg-transparent text-slate-300 text-xs px-2 py-1 focus:outline-none"
-                            onChange={(e) => {
-                                const end = e.target.value;
-                                setDateRange(prev => ({ start: prev?.start || end, end }));
-                                setFilterLabel('Custom');
-                            }}
-                        />
-                    </div>
-
-                    <div className="relative">
-                        <select
-                            value={filterSource}
-                            onChange={(e) => setFilterSource(e.target.value)}
-                            className="appearance-none px-4 py-3 pr-10 glass-panel rounded-xl text-slate-300 text-sm bg-transparent border border-[#ffffff08] focus:outline-none focus:border-blue-500/30 cursor-pointer"
-                        >
-                            {uniqueSources.map(s => (
-                                <option key={s} value={s} className="bg-[#0f1117]">{s === 'all' ? 'All Sources' : s}</option>
-                            ))}
-                        </select>
-                        <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
-
-                    <div className="relative">
-                        <select
-                            value={filterScore}
-                            onChange={(e) => setFilterScore(e.target.value)}
-                            className="appearance-none px-4 py-3 pr-10 glass-panel rounded-xl text-slate-300 text-sm bg-transparent border border-[#ffffff08] focus:outline-none focus:border-blue-500/30 cursor-pointer"
-                        >
-                            <option value="all" className="bg-[#0f1117]">All Scores</option>
-                            <option value="high" className="bg-[#0f1117]">High Score &gt; 75</option>
-                            <option value="mid" className="bg-[#0f1117]">Mid Score (50-75)</option>
-                            <option value="low" className="bg-[#0f1117]">Low Score &lt; 50</option>
-                        </select>
-                        <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
-
-                    <div className="relative">
-                        <div className="relative">
-                            <select
-                                onChange={(e) => {
-                                    handleExport(e.target.value);
-                                    e.target.value = 'default'; // Reset
-                                }}
-                                defaultValue="default"
-                                className="appearance-none pl-10 pr-8 py-3 glass-panel rounded-xl text-emerald-400 text-sm bg-transparent border border-emerald-500/20 focus:outline-none focus:border-emerald-500/50 cursor-pointer font-bold hover:bg-emerald-500/10 transition-colors"
-                            >
-                                <option value="default" className="bg-[#0f1117] hidden">Export</option>
-                                <option value="csv" className="bg-[#0f1117]">Export CSV</option>
-                                <option value="excel" className="bg-[#0f1117]">Export Excel</option>
-                            </select>
-                            {isExporting ? (
-                                <Loader2 className="w-4 h-4 text-emerald-400 animate-spin absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                            ) : (
-                                <Download className="w-4 h-4 text-emerald-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                            )}
-                            <ChevronDown className="w-4 h-4 text-emerald-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-                    </div>
-
-                    <button
-                        onClick={() => setShowSearch(!showSearch)}
-                        className={`p-3 glass-panel rounded-xl transition-colors ${showSearch ? 'text-blue-400 border-blue-500/30' : 'text-slate-400 hover:text-white hover:border-[#ffffff20]'}`}
-                    >
-                        <Search className="w-5 h-5" />
-                    </button>
+                    <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="appearance-none px-4 py-3 glass-panel rounded-xl text-slate-300 text-sm bg-[#000000]/20 border border-[#ffffff08] focus:outline-none focus:border-blue-500/30 cursor-pointer">
+                        <option value="all" className="bg-[#0f1117]">All Sources</option>
+                        {Array.from(new Set(leads.map(l => l.source))).map(s => <option key={s} value={s} className="bg-[#0f1117]">{s}</option>)}
+                    </select>
+                    <button onClick={() => setShowSearch(!showSearch)} className={`p-3 glass-panel rounded-xl transition-colors ${showSearch ? 'text-blue-400 border-blue-500/30' : 'text-slate-400 hover:text-white'}`}><Search className="w-5 h-5" /></button>
+                    <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-3 rounded-xl transition-all font-bold shadow-lg shadow-emerald-500/20"><Plus className="w-5 h-5" /> Add Lead</button>
                 </div>
             </div>
 
             {showSearch && (
-                <div className="mb-6 relative group">
+                <div className="mb-6 relative">
                     <Search className="w-4 h-4 text-slate-500 absolute left-5 top-1/2 -translate-y-1/2" />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search leads by name, company, or location..."
-                        className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl py-3 px-12 text-slate-200 focus:outline-none focus:border-blue-500/30 placeholder:text-slate-700"
-                        autoFocus
-                    />
+                    <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search..." className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl py-3 px-12 text-slate-200 focus:outline-none focus:border-blue-500/30" autoFocus />
                 </div>
             )}
 
             <div className="glass-panel rounded-3xl overflow-hidden min-h-[500px] relative">
                 {loading ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
-                        <Loader2 className="w-10 h-10 animate-spin mb-4 text-emerald-400" />
-                        <p className="font-mono text-sm tracking-widest uppercase">Loading leads...</p>
-                    </div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500"><Loader2 className="w-10 h-10 animate-spin mb-4 text-emerald-400" /><p className="font-mono text-sm tracking-widest uppercase">Loading...</p></div>
                 ) : filteredLeads.length === 0 ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600">
-                        <div className="p-4 rounded-full bg-[#ffffff03] mb-4">
-                            <Search className="w-8 h-8 opacity-50" />
-                        </div>
-                        <p className="text-lg">No leads found for this period.</p>
-                        <p className="text-sm mt-2 opacity-50">Try changing the date filter.</p>
-                    </div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600"><p className="text-lg">No leads found.</p></div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-[#ffffff02] border-b border-[#ffffff05] text-xs font-mono text-slate-500 uppercase tracking-widest">
                                     <th className="px-6 py-5">Target</th>
-                                    <th className="px-6 py-5">
-                                        <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-amber-400" /> Score</span>
-                                    </th>
+                                    <th className="px-6 py-5">Score</th>
                                     <th className="px-6 py-5">Contact</th>
-                                    <th className="px-6 py-5">Email</th>
-                                    <th className="px-6 py-5">Organization</th>
                                     <th className="px-6 py-5">Location</th>
                                     <th className="px-6 py-5">Source</th>
                                     <th className="px-6 py-5">Status</th>
@@ -596,57 +411,21 @@ export default function LeadsPage() {
                                     <tr key={lead.id} className="hover:bg-[#ffffff03] transition-colors group">
                                         <td className="px-6 py-5">
                                             <div className="font-medium text-slate-200 group-hover:text-emerald-400 transition-colors max-w-[200px] truncate">{lead.title}</div>
-                                            {lead.rating && (
-                                                <div className="flex items-center gap-1 mt-1">
-                                                    <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">★ {lead.rating}</span>
-                                                </div>
-                                            )}
+                                            <div className="text-xs text-slate-500">{lead.company} {lead.rating && `• ★${lead.rating}`}</div>
                                         </td>
+                                        <td className="px-6 py-5"><MatchBadge score={lead.match_score} /></td>
                                         <td className="px-6 py-5">
-                                            <MatchBadge score={lead.match_score} />
+                                            {lead.phone ? <span className="text-xs font-mono text-slate-400 flex items-center gap-1"><Phone className="w-3 h-3" /> {lead.phone}</span> : <span className="text-xs text-slate-600">-</span>}
                                         </td>
-                                        <td className="px-6 py-5">
-                                            {lead.phone ? (
-                                                <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
-                                                    <Phone className="w-3 h-3" /> {lead.phone}
-                                                </span>
-                                            ) : <span className="text-xs text-slate-600">-</span>}
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            {lead.email ? (
-                                                <a href={`mailto:${lead.email}`} className="text-xs font-mono text-blue-400 hover:underline flex items-center gap-1">
-                                                    @ {lead.email}
-                                                </a>
-                                            ) : <span className="text-xs text-slate-600">-</span>}
-                                        </td>
-                                        <td className="px-6 py-5 text-slate-400 max-w-[150px] truncate">{lead.company}</td>
                                         <td className="px-6 py-5 text-slate-500 max-w-[120px] truncate">{lead.location}</td>
-                                        <td className="px-6 py-5">
-                                            <SourceBadge source={lead.source} />
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            <StatusBadge status={lead.status} />
-                                        </td>
+                                        <td className="px-6 py-5"><SourceBadge source={lead.source} /></td>
+                                        <td className="px-6 py-5"><StatusBadge status={lead.status} /></td>
                                         <td className="px-6 py-5">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => setWaLead(lead)}
-                                                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition-all text-xs font-bold border border-emerald-500/20"
-                                                    title="WhatsApp Outreach"
-                                                >
-                                                    <MessageCircle className="w-3.5 h-3.5" />
-                                                    <span className="hidden lg:inline">WA</span>
-                                                </button>
-
-                                                <a
-                                                    href={lead.url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[#ffffff05] hover:bg-blue-500/20 text-slate-400 hover:text-blue-400 transition-all"
-                                                    title="Open Link"
-                                                >
-                                                    <ExternalLink className="w-4 h-4" />
-                                                </a>
+                                                <button onClick={() => setWaLead(lead)} className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" title="WhatsApp"><MessageCircle className="w-4 h-4" /></button>
+                                                <button onClick={() => setEditLead(lead)} className="p-2 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20" title="Edit"><Edit className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDelete(lead.id)} className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                                {lead.url && <a href={lead.url} target="_blank" className="p-2 rounded-lg bg-[#ffffff05] text-slate-400 hover:text-white"><ExternalLink className="w-4 h-4" /></a>}
                                             </div>
                                         </td>
                                     </tr>
@@ -657,14 +436,9 @@ export default function LeadsPage() {
                 )}
             </div>
 
-            {waLead && (
-                <WAModal
-                    lead={waLead}
-                    onClose={() => setWaLead(null)}
-                    templates={DEFAULT_TEMPLATES}
-                    myName={myName}
-                />
-            )}
+            {waLead && <WAModal lead={waLead} onClose={() => setWaLead(null)} templates={DEFAULT_TEMPLATES} myName={myName} />}
+            {showCreateModal && <LeadModal onClose={() => setShowCreateModal(false)} onSave={handleCreate} />}
+            {editLead && <LeadModal lead={editLead} onClose={() => setEditLead(null)} onSave={handleUpdate} />}
         </div>
     );
 }

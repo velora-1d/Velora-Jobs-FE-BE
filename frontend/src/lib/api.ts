@@ -82,6 +82,16 @@ export interface Stats {
     unpaid_invoices: number;
 }
 
+export interface Campaign {
+    id: number;
+    name: string;
+    status: string;
+    message_template?: string;
+    target_criteria?: string;
+    scheduled_at?: string;
+    created_at?: string;
+}
+
 function authHeaders(): HeadersInit {
     const token = localStorage.getItem('token');
     return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
@@ -95,6 +105,7 @@ async function authFetch(url: string, opts: RequestInit = {}) {
 }
 
 export const api = {
+    API_URL,
     // ─── Leads ───
     async getLeads(startDate?: string, endDate?: string): Promise<Lead[]> {
         const params = new URLSearchParams();
@@ -102,6 +113,18 @@ export const api = {
         if (endDate) params.append('end_date', endDate);
         const queryString = params.toString() ? `?${params.toString()}` : '';
         return authFetch(`${API_URL}/api/leads${queryString}`);
+    },
+
+    async createLead(data: Partial<Lead>) {
+        return authFetch(`${API_URL}/api/leads`, { method: 'POST', body: JSON.stringify(data) });
+    },
+
+    async updateLead(id: number, data: Partial<Lead>) {
+        return authFetch(`${API_URL}/api/leads/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+
+    async deleteLead(id: number) {
+        return authFetch(`${API_URL}/api/leads/${id}`, { method: 'DELETE' });
     },
 
     async startScrape(keywords: string, location: string = 'Indonesia', sources: string[] = ['linkedin', 'upwork', 'indeed', 'glints', 'gmaps'], limit: number = 10, safeMode: boolean = false) {
@@ -154,6 +177,10 @@ export const api = {
         return authFetch(`${API_URL}/api/followups/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     },
 
+    async deleteFollowUp(id: number) {
+        return authFetch(`${API_URL}/api/followups/${id}`, { method: 'DELETE' });
+    },
+
     // ─── Projects ───
     async getProjects(): Promise<Project[]> {
         return authFetch(`${API_URL}/api/projects`);
@@ -165,6 +192,10 @@ export const api = {
 
     async updateProject(id: number, data: Partial<{ name: string; description: string; status: string; budget: number; progress: number; deadline: string }>) {
         return authFetch(`${API_URL}/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+
+    async deleteProject(id: number) {
+        return authFetch(`${API_URL}/api/projects/${id}`, { method: 'DELETE' });
     },
 
     // ─── Invoices ───
@@ -179,6 +210,10 @@ export const api = {
 
     async updateInvoice(id: number, data: Partial<{ status: string; items: InvoiceItem[]; tax_percent: number; due_date: string; notes: string }>) {
         return authFetch(`${API_URL}/api/invoices/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+
+    async deleteInvoice(id: number) {
+        return authFetch(`${API_URL}/api/invoices/${id}`, { method: 'DELETE' });
     },
 
     // ─── Stats ───
@@ -208,6 +243,25 @@ export const api = {
     async testTelegram(): Promise<{ success: boolean; error?: string }> {
         return authFetch(`${API_URL}/api/telegram/test`, { method: 'POST' });
     },
+
+    // ─── Campaigns ───
+    async getCampaigns(): Promise<Campaign[]> {
+        return authFetch(`${API_URL}/api/campaigns`);
+    },
+
+    async createCampaign(data: { name: string; message_template?: string; target_criteria?: string; scheduled_at?: string }) {
+        return authFetch(`${API_URL}/api/campaigns`, { method: 'POST', body: JSON.stringify(data) });
+    },
+
+    async updateCampaign(id: number, data: Partial<Campaign>) {
+        return authFetch(`${API_URL}/api/campaigns/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+
+    async deleteCampaign(id: number) {
+        return authFetch(`${API_URL}/api/campaigns/${id}`, { method: 'DELETE' });
+    },
+
+
 
     // ─── Export (CSV) ───
     async exportCSV(type: 'leads' | 'projects' | 'invoices') {

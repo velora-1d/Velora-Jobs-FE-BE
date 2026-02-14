@@ -98,3 +98,15 @@ class Setting(Base):
     key = Column(String, primary_key=True, index=True)
     value = Column(String)
     description = Column(String, nullable=True)
+
+class Campaign(Base):
+    __tablename__ = "campaigns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    status = Column(String, default="draft")  # draft, scheduled, running, completed
+    message_template = Column(Text, nullable=True)
+    target_criteria = Column(Text, nullable=True)  # JSON string
+    scheduled_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=get_wib_now)
+    updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
