@@ -526,6 +526,9 @@ export default function LeadsPage() {
                                             )}
                                         </td>
                                         <td className="px-6 py-5">
+                                            <MatchBadge score={lead.match_score} />
+                                        </td>
+                                        <td className="px-6 py-5">
                                             <div className="flex flex-col gap-1">
                                                 {lead.phone ? (
                                                     <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
