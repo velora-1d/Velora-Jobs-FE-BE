@@ -5,8 +5,10 @@ import { api, Lead } from '@/lib/api';
 import {
     Loader2, ExternalLink, Database, Search, Download, Zap,
     MessageCircle, X, Copy, Check, Send, ChevronDown, Phone,
-    Building2, School, ShoppingBag, Briefcase, CheckCircle2, XCircle
+    Building2, School, ShoppingBag, Briefcase, CheckCircle2, XCircle, Download
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 // ─── Pre-built Message Templates ────────────────────────
 const DEFAULT_TEMPLATES = [
@@ -311,8 +313,10 @@ export default function LeadsPage() {
 
     // Filtering State
     const [filterSource, setFilterSource] = useState<string>('all');
+    const [filterScore, setFilterScore] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [showSearch, setShowSearch] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
     // Date Filtering
     const [dateRange, setDateRange] = useState<{ start: string; end: string } | null>(null);
@@ -371,13 +375,53 @@ export default function LeadsPage() {
 
     const uniqueSources = ['all', ...Array.from(new Set(leads.map(l => l.source)))];
 
+    const handleExport = (type: string) => {
+        if (!type || type === 'default') return;
+        setIsExporting(true);
+
+        const data = filteredLeads.map(l => ({
+            Title: l.title,
+            Company: l.company,
+            Phone: l.phone,
+            Email: l.email || '',
+            Score: l.match_score || 0,
+            Rating: l.rating || '',
+            Location: l.location,
+            Source: l.source,
+            Status: l.status,
+            URL: l.url
+        }));
+
+        const dateStr = new Date().toISOString().split('T')[0];
+
+        if (type === 'excel') {
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Leads");
+            const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' });
+            saveAs(dataBlob, `leads_export_${dateStr}.xlsx`);
+        } else if (type === 'csv') {
+            const ws = XLSX.utils.json_to_sheet(data);
+            const csv = XLSX.utils.sheet_to_csv(ws);
+            const dataBlob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            saveAs(dataBlob, `leads_export_${dateStr}.csv`);
+        }
+        setIsExporting(false);
+    };
+
     const filteredLeads = leads.filter(lead => {
         const matchSource = filterSource === 'all' || lead.source === filterSource;
+        const matchScore = filterScore === 'all' ||
+            (filterScore === 'high' && (lead.match_score || 0) >= 75) ||
+            (filterScore === 'mid' && (lead.match_score || 0) >= 50 && (lead.match_score || 0) < 75) ||
+            (filterScore === 'low' && (lead.match_score || 0) < 50);
+
         const matchSearch = !searchQuery ||
             lead.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
             lead.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
             lead.location.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchSource && matchSearch;
+        return matchSource && matchScore && matchSearch;
     });
 
     return (
@@ -434,6 +478,43 @@ export default function LeadsPage() {
                             ))}
                         </select>
                         <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+
+                    <div className="relative">
+                        <select
+                            value={filterScore}
+                            onChange={(e) => setFilterScore(e.target.value)}
+                            className="appearance-none px-4 py-3 pr-10 glass-panel rounded-xl text-slate-300 text-sm bg-transparent border border-[#ffffff08] focus:outline-none focus:border-blue-500/30 cursor-pointer"
+                        >
+                            <option value="all" className="bg-[#0f1117]">All Scores</option>
+                            <option value="high" className="bg-[#0f1117]">High Score &gt; 75</option>
+                            <option value="mid" className="bg-[#0f1117]">Mid Score (50-75)</option>
+                            <option value="low" className="bg-[#0f1117]">Low Score &lt; 50</option>
+                        </select>
+                        <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+
+                    <div className="relative">
+                        <div className="relative">
+                            <select
+                                onChange={(e) => {
+                                    handleExport(e.target.value);
+                                    e.target.value = 'default'; // Reset
+                                }}
+                                defaultValue="default"
+                                className="appearance-none pl-10 pr-8 py-3 glass-panel rounded-xl text-emerald-400 text-sm bg-transparent border border-emerald-500/20 focus:outline-none focus:border-emerald-500/50 cursor-pointer font-bold hover:bg-emerald-500/10 transition-colors"
+                            >
+                                <option value="default" className="bg-[#0f1117] hidden">Export</option>
+                                <option value="csv" className="bg-[#0f1117]">Export CSV</option>
+                                <option value="excel" className="bg-[#0f1117]">Export Excel</option>
+                            </select>
+                            {isExporting ? (
+                                <Loader2 className="w-4 h-4 text-emerald-400 animate-spin absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            ) : (
+                                <Download className="w-4 h-4 text-emerald-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            )}
+                            <ChevronDown className="w-4 h-4 text-emerald-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
                     </div>
 
                     <button
