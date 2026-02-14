@@ -8,8 +8,10 @@ import autoTable from 'jspdf-autotable';
 
 // Mock Leads for Demo (In real app, fetch from API)
 const MOCK_LEADS: Lead[] = [
-    { id: 1, title: 'CV Maju Jaya', company: 'Construction', location: 'Jakarta', source: 'gmaps' },
-    { id: 2, title: 'PT Abadi Sentosa', company: 'Retail', location: 'Surabaya', source: 'linkedin' },
+const MOCK_LEADS: Lead[] = [
+    { id: 1, title: 'CV Maju Jaya', company: 'Construction', location: 'Jakarta', source: 'gmaps', url: 'https://maps.google.com', status: 'new' },
+    { id: 2, title: 'PT Abadi Sentosa', company: 'Retail', location: 'Surabaya', source: 'linkedin', url: 'https://linkedin.com', status: 'contacted' },
+];
 ];
 
 export default function DocumentsPage() {
