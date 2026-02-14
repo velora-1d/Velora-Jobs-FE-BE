@@ -8,6 +8,7 @@ import {
     Building2, School, ShoppingBag, Briefcase, CheckCircle2, XCircle,
     Plus, Edit, Trash2, MapPin, Globe, Mail
 } from 'lucide-react';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import * as XLSX from 'xlsx';
 
 // ─── Pre-built Message Templates (Unchanged) ────────────────────────
@@ -289,6 +290,8 @@ export default function LeadsPage() {
     const [waLead, setWaLead] = useState<Lead | null>(null);
     const [editLead, setEditLead] = useState<Lead | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [deleteId, setDeleteId] = useState<number | null>(null);
     const [myName, setMyName] = useState('Mahin');
 
     const [filterSource, setFilterSource] = useState('all');
@@ -342,9 +345,16 @@ export default function LeadsPage() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('Area you sure you want to delete this lead? This will also remove related Projects and Tasks.')) return;
+        setDeleteId(id);
+        setShowConfirm(true);
+    };
+
+    const executeDelete = async () => {
+        if (!deleteId) return;
         try {
-            await api.deleteLead(id);
+            await api.deleteLead(deleteId);
+            setShowConfirm(false);
+            setDeleteId(null);
             fetchData();
         } catch (e) { alert('Failed to delete lead'); }
     };
@@ -439,6 +449,17 @@ export default function LeadsPage() {
             {waLead && <WAModal lead={waLead} onClose={() => setWaLead(null)} templates={DEFAULT_TEMPLATES} myName={myName} />}
             {showCreateModal && <LeadModal onClose={() => setShowCreateModal(false)} onSave={handleCreate} />}
             {editLead && <LeadModal lead={editLead} onClose={() => setEditLead(null)} onSave={handleUpdate} />}
+
+            <ConfirmModal
+                isOpen={showConfirm}
+                title="Delete Lead"
+                message="Are you sure you want to delete this lead? This will also remove all related projects, tasks, and history. This action cannot be undone."
+                onConfirm={executeDelete}
+                onCancel={() => {
+                    setShowConfirm(false);
+                    setDeleteId(null);
+                }}
+            />
         </div>
     );
 }

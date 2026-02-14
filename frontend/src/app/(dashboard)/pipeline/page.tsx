@@ -7,6 +7,7 @@ import {
     Calendar, DollarSign, TrendingUp, FileText, ChevronDown, Briefcase,
     CheckCircle2, XCircle, AlertCircle, Percent, Trash2, Edit3, Download, Edit
 } from 'lucide-react';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 // ═══════════════════════════════════════════════════
 // ──── FOLLOW-UP TAB ────
@@ -18,6 +19,8 @@ function FollowUpTab() {
     const [loading, setLoading] = useState(true);
     const [showAdd, setShowAdd] = useState(false);
     const [editId, setEditId] = useState<number | null>(null);
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [deleteId, setDeleteId] = useState<number | null>(null);
     const [form, setForm] = useState({ lead_id: 0, type: 'wa', note: '', next_follow_date: '' });
 
     const load = async () => {
@@ -54,9 +57,16 @@ function FollowUpTab() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('Delete this follow-up?')) return;
+        setDeleteId(id);
+        setShowConfirm(true);
+    };
+
+    const executeDelete = async () => {
+        if (!deleteId) return;
         try {
-            await api.deleteFollowUp(id);
+            await api.deleteFollowUp(deleteId);
+            setShowConfirm(false);
+            setDeleteId(null);
             load();
         } catch (e) { alert('Failed to delete'); }
     };
@@ -194,6 +204,17 @@ function FollowUpTab() {
                     ))}
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={showConfirm}
+                title="Delete Follow-up"
+                message="Are you sure you want to delete this follow-up? This action cannot be undone."
+                onConfirm={executeDelete}
+                onCancel={() => {
+                    setShowConfirm(false);
+                    setDeleteId(null);
+                }}
+            />
         </div>
     );
 }
@@ -208,6 +229,8 @@ function ProjectsTab() {
     const [loading, setLoading] = useState(true);
     const [showAdd, setShowAdd] = useState(false);
     const [editId, setEditId] = useState<number | null>(null);
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [deleteId, setDeleteId] = useState<number | null>(null);
     const [form, setForm] = useState({ lead_id: 0, name: '', description: '', budget: '', deadline: '' });
 
     const load = async () => {
@@ -246,9 +269,16 @@ function ProjectsTab() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('Delete this project?')) return;
+        setDeleteId(id);
+        setShowConfirm(true);
+    };
+
+    const executeDelete = async () => {
+        if (!deleteId) return;
         try {
-            await api.deleteProject(id);
+            await api.deleteProject(deleteId);
+            setShowConfirm(false);
+            setDeleteId(null);
             load();
         } catch (e) { alert('Failed to delete'); }
     };
@@ -384,6 +414,17 @@ function ProjectsTab() {
                     ))}
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={showConfirm}
+                title="Delete Project"
+                message="Are you sure you want to delete this project? This will also remove related invoices and history. This action cannot be undone."
+                onConfirm={executeDelete}
+                onCancel={() => {
+                    setShowConfirm(false);
+                    setDeleteId(null);
+                }}
+            />
         </div>
     );
 }
@@ -398,6 +439,8 @@ function InvoicesTab() {
     const [loading, setLoading] = useState(true);
     const [showAdd, setShowAdd] = useState(false);
     const [editId, setEditId] = useState<number | null>(null);
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [deleteId, setDeleteId] = useState<number | null>(null);
     const [form, setForm] = useState({ project_id: 0, items: [{ desc: '', qty: 1, price: 0 }] as InvoiceItem[], tax_percent: 0, due_date: '', notes: '' });
 
     const load = async () => {
@@ -448,9 +491,16 @@ function InvoicesTab() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('Delete this invoice?')) return;
+        setDeleteId(id);
+        setShowConfirm(true);
+    };
+
+    const executeDelete = async () => {
+        if (!deleteId) return;
         try {
-            await api.deleteInvoice(id);
+            await api.deleteInvoice(deleteId);
+            setShowConfirm(false);
+            setDeleteId(null);
             load();
         } catch (e) { alert('Failed to delete'); }
     };
@@ -587,6 +637,17 @@ function InvoicesTab() {
                     </table>
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={showConfirm}
+                title="Delete Invoice"
+                message="Are you sure you want to delete this invoice? This action cannot be undone."
+                onConfirm={executeDelete}
+                onCancel={() => {
+                    setShowConfirm(false);
+                    setDeleteId(null);
+                }}
+            />
         </div>
     );
 }

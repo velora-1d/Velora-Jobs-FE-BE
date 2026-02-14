@@ -9,6 +9,7 @@ import {
     ChevronLeft, ChevronRight, Hash, Clock, Trash2, Edit
 } from 'lucide-react';
 import { api, FollowUp, Lead } from '@/lib/api';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 const localizer = momentLocalizer(moment);
 
@@ -99,6 +100,7 @@ export default function TasksPage() {
     const [leads, setLeads] = useState<Lead[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
 
     // Form State
     const [editId, setEditId] = useState<number | null>(null);
@@ -160,9 +162,14 @@ export default function TasksPage() {
     };
 
     const handleDelete = async () => {
-        if (!editId || !confirm('Are you sure you want to delete this task?')) return;
+        setShowConfirm(true);
+    };
+
+    const executeDelete = async () => {
+        if (!editId) return;
         try {
             await api.deleteFollowUp(editId);
+            setShowConfirm(false);
             closeModal();
             loadData();
         } catch (e) { alert('Failed to delete'); }
@@ -348,6 +355,14 @@ export default function TasksPage() {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={showConfirm}
+                title="Delete Task"
+                message="Are you sure you want to delete this task? This action cannot be undone."
+                onConfirm={executeDelete}
+                onCancel={() => setShowConfirm(false)}
+            />
         </div>
     );
 }

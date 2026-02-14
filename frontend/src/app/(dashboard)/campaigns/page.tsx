@@ -3,12 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { Send, Users, Zap, Plus, X, Edit, Trash2, Calendar, Play, Pause, CheckCircle2 } from 'lucide-react';
 import { api, Campaign } from '@/lib/api';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 export default function CampaignsPage() {
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [showModal, setShowModal] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [deleteId, setDeleteId] = useState<number | null>(null);
 
     // Form
     const [editId, setEditId] = useState<number | null>(null);
@@ -45,10 +48,17 @@ export default function CampaignsPage() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('Are you sure you want to delete this campaign?')) return;
+        setDeleteId(id);
+        setShowConfirm(true);
+    };
+
+    const executeDelete = async () => {
+        if (!deleteId) return;
         try {
-            await api.deleteCampaign(id);
-            if (selectedId === id) setSelectedId(null);
+            await api.deleteCampaign(deleteId);
+            setShowConfirm(false);
+            setDeleteId(null);
+            if (selectedId === deleteId) setSelectedId(null);
             loadCampaigns();
         } catch (e) { alert("Failed to delete"); }
     };
@@ -237,6 +247,17 @@ export default function CampaignsPage() {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={showConfirm}
+                title="Delete Campaign"
+                message="Are you sure you want to delete this campaign? This action cannot be undone."
+                onConfirm={executeDelete}
+                onCancel={() => {
+                    setShowConfirm(false);
+                    setDeleteId(null);
+                }}
+            />
         </div>
     );
 }
