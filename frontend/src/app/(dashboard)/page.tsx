@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { api, Lead } from '@/lib/api';
-import { Activity, Users, Zap, Clock, ArrowRight, Sparkles } from 'lucide-react';
+import { Activity, Users, Zap, Clock, ArrowRight, Sparkles, PieChart, BarChart as BarChartIcon } from 'lucide-react';
+import LeadSourceChart from '@/components/analytics/LeadSourceChart';
+import ScoreChart from '@/components/analytics/ScoreChart';
 
 export default function Dashboard() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -54,6 +56,22 @@ export default function Dashboard() {
           value="0"
           subtitle="Queue empty"
         />
+      </div>
+
+      {/* Analytics Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+        <div className="glass-panel p-6 rounded-3xl">
+          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+            <PieChart className="w-5 h-5 text-blue-400" /> Lead Sources
+          </h2>
+          <LeadSourceChart leads={leads} />
+        </div>
+        <div className="glass-panel p-6 rounded-3xl">
+          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+            <BarChartIcon className="w-5 h-5 text-emerald-400" /> Score Distribution
+          </h2>
+          <ScoreChart leads={leads} />
+        </div>
       </div>
 
       {/* Glass Panel Content */}
