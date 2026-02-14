@@ -378,35 +378,55 @@ export default function LeadsPage() {
         if (!type || type === 'default') return;
         setIsExporting(true);
 
-        const data = filteredLeads.map(l => ({
-            Title: l.title,
-            Company: l.company,
-            Phone: l.phone,
-            Email: l.email || '',
-            Score: l.match_score || 0,
-            Rating: l.rating || '',
-            Location: l.location,
-            Source: l.source,
-            Status: l.status,
-            URL: l.url
-        }));
+        try {
+            const data = filteredLeads.map(l => ({
+                Title: l.title,
+                Company: l.company,
+                Phone: l.phone,
+                Email: l.email || '',
+                Score: l.match_score || 0,
+                Rating: l.rating || '',
+                Location: l.location,
+                Source: l.source,
+                Status: l.status,
+                URL: l.url
+            }));
 
-        const dateStr = new Date().toISOString().split('T')[0];
+            const dateStr = new Date().toISOString().split('T')[0];
+            let blob: Blob;
+            let filename: string;
 
-        if (type === 'excel') {
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Leads");
-            const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' });
-            saveAs(dataBlob, `leads_export_${dateStr}.xlsx`);
-        } else if (type === 'csv') {
-            const ws = XLSX.utils.json_to_sheet(data);
-            const csv = XLSX.utils.sheet_to_csv(ws);
-            const dataBlob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            saveAs(dataBlob, `leads_export_${dateStr}.csv`);
+            if (type === 'excel') {
+                const ws = XLSX.utils.json_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Leads");
+                const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                filename = `leads_export_${dateStr}.xlsx`;
+            } else {
+                // CSV
+                const ws = XLSX.utils.json_to_sheet(data);
+                const csv = XLSX.utils.sheet_to_csv(ws);
+                // Add BOM for Excel compatibility
+                blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                filename = `leads_export_${dateStr}.csv`;
+            }
+
+            // Native download
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error("Export failed:", error);
+            alert("Export failed. Please try again.");
+        } finally {
+            setIsExporting(false);
         }
-        setIsExporting(false);
     };
 
     const filteredLeads = leads.filter(lead => {
