@@ -8,7 +8,6 @@ import {
     Building2, School, ShoppingBag, Briefcase, CheckCircle2, XCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
 
 // ─── Pre-built Message Templates ────────────────────────
 const DEFAULT_TEMPLATES = [
