@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from database import init_db, get_db
+from database import init_db, get_db, SessionLocal
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import timedelta
+import asyncio
+import os
 from auth import verify_password, get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from models import User
 
@@ -21,15 +23,18 @@ def on_startup():
     default_email = os.getenv("ADMIN_EMAIL", "email.jobs@velora.com")
     default_pass = os.getenv("ADMIN_PASSWORD", "admin123")
     
-    user = db.query(User).filter(User.email == default_email).first()
-    if not user:
-        hashed_password = get_password_hash(default_pass)
-        new_user = User(email=default_email, hashed_password=hashed_password)
-        db.add(new_user)
-        db.commit()
-        print(f"Default user created: {default_email}")
-    else:
-        print("Default user already exists.")
+    try:
+        user = db.query(User).filter(User.email == default_email).first()
+        if not user:
+            hashed_password = get_password_hash(default_pass)
+            new_user = User(email=default_email, hashed_password=hashed_password)
+            db.add(new_user)
+            db.commit()
+            print(f"Default user created: {default_email}")
+        else:
+            print("Default user already exists.")
+    finally:
+        db.close()
 
 # Configure CORS
 import os
@@ -136,41 +141,43 @@ async def scrape(
     if SCRAPER_RUNNING:
         return {"message": "Scraper is already running", "status": "running"}
 
-    # Reset State
-    SCRAPER_LOGS.clear()
-    SCRAPER_RUNNING = True
-    SCRAPER_INTERRUPT = asyncio.Event()
-    
-    # Secret settings from DB (Only for LinkedIn now)
-    settings = {s.key: s.value for s in db.query(Setting).all()}
-    li_cookie = settings.get("linkedin_cookie", "")
-    
-    # Priority configurations from .env
-    proxy_url = os.getenv("PROXY_URL", settings.get("proxy_url", ""))
-    
-    # Parse sources
-    source_list = [s.strip().lower() for s in sources.split(",") if s.strip()]
-    
-    background_tasks.add_task(
-        run_scraper_task, 
-        keywords, 
-        location, 
-        source_list, 
-        limit, 
-        safe_mode, 
-        li_cookie, 
-        proxy_url, 
-        db,
-        SCRAPER_INTERRUPT
-    )
+    try:
+        # Reset State
+        SCRAPER_LOGS.clear()
+        SCRAPER_RUNNING = True
+        SCRAPER_INTERRUPT = asyncio.Event()
+        
+        # Fetch settings
+        settings = {s.key: s.value for s in db.query(Setting).all()}
+        li_cookie = settings.get("linkedin_cookie", "")
+        proxy_url = os.getenv("PROXY_URL", settings.get("proxy_url", ""))
+        
+        # Parse sources
+        source_list = [s.strip().lower() for s in sources.split(",") if s.strip()]
+        
+        background_tasks.add_task(
+            run_scraper_task, 
+            keywords, 
+            location, 
+            source_list, 
+            limit, 
+            safe_mode, 
+            li_cookie, 
+            proxy_url, 
+            SCRAPER_INTERRUPT
+        )
 
-    return {"message": "Scraping started", "status": "started"}
+        return {"message": "Scraping started", "status": "started"}
+    except Exception as e:
+        SCRAPER_RUNNING = False
+        raise HTTPException(status_code=500, detail=f"Failed to start scraper: {str(e)}")
 
-async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie, proxy, db, interrupt_event):
+async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie, proxy, interrupt_event):
     global SCRAPER_RUNNING
     from scraper import JobScraper
     from models import Lead
     from ai_scorer import score_lead
+    from database import SessionLocal
 
     log_message(f"🚀 Starting background scrape for '{keywords}'")
     
@@ -183,22 +190,30 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
         interrupt_event=interrupt_event
     )
     
+    db = SessionLocal()
     try:
         results = await scraper.scrape_all(keywords, location, sources, limit=limit)
         
         saved_count = 0
         for item in results:
-            if interrupt_event.is_set(): break
+            if interrupt_event.is_set(): 
+                log_message("🛑 Loop interrupted, stopping save...")
+                break
             
-            # Check for duplicates
+            # Check for duplicates using the local session
             existing = db.query(Lead).filter(Lead.url == item['url']).first()
             if not existing:
+                log_message(f"✨ New lead found: {item['title']} @ {item['company']}")
                 # Score with AI
-                ai_result = await score_lead(
-                    title=item['title'],
-                    company=item['company'],
-                    description=item.get('description', ''),
-                )
+                try:
+                    ai_result = await score_lead(
+                        title=item['title'],
+                        company=item['company'],
+                        description=item.get('description', ''),
+                    )
+                except Exception as ai_e:
+                    log_message(f"⚠️ AI Scorer error: {str(ai_e)}")
+                    ai_result = {"score": 0, "reason": "AI scoring failed"}
                 
                 new_lead = Lead(
                     title=item['title'],
@@ -227,7 +242,10 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
                 
     except Exception as e:
         log_message(f"❌ Error during scraping: {str(e)}")
+        import traceback
+        print(traceback.format_exc()) # Still logged to Docker stdout
     finally:
+        db.close()
         SCRAPER_RUNNING = False
         log_message("💤 Scraper task ended.")
 
