@@ -132,30 +132,7 @@ function SourceBadge({ source }: { source: string }) {
     );
 }
 
-// ─── Helper Components ────────────────────────
-
-function MatchBadge({ score }: { score?: number }) {
-    if (!score) return <span className="text-slate-600 text-xs">-</span>;
-    let color = 'text-slate-400 bg-slate-500/10 border-slate-500/20';
-    if (score >= 80) color = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
-    else if (score >= 50) color = 'text-amber-400 bg-amber-500/10 border-amber-500/20';
-    else if (score > 0) color = 'text-red-400 bg-red-500/10 border-red-500/20';
-
-    return (
-        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${color}`}>
-            {score}%
-        </span>
-    );
-}
-
-function SourceBadge({ source }: { source: string }) {
-    return (
-        <span className="text-xs font-mono text-slate-500 bg-[#ffffff05] px-2 py-1 rounded border border-[#ffffff05] capitalize">
-            {source}
-        </span>
-    );
-}
-
+// ─── Status Badge ────────────────────────
 function StatusBadge({ status }: { status: string }) {
     const map: Record<string, string> = {
         'new': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -529,20 +506,18 @@ export default function LeadsPage() {
                                             <MatchBadge score={lead.match_score} />
                                         </td>
                                         <td className="px-6 py-5">
-                                            <div className="flex flex-col gap-1">
-                                                {lead.phone ? (
-                                                    <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
-                                                        <Phone className="w-3 h-3" /> {lead.phone}
-                                                    </span>
-                                                ) : <span className="text-xs text-slate-600">-</span>}
-
-                                                {/* Email Column Logic - if added to Lead type later */}
-                                                {(lead as any).email && (
-                                                    <a href={`mailto:${(lead as any).email}`} className="text-xs font-mono text-blue-400 hover:underline flex items-center gap-1">
-                                                        @ {(lead as any).email}
-                                                    </a>
-                                                )}
-                                            </div>
+                                            {lead.phone ? (
+                                                <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
+                                                    <Phone className="w-3 h-3" /> {lead.phone}
+                                                </span>
+                                            ) : <span className="text-xs text-slate-600">-</span>}
+                                        </td>
+                                        <td className="px-6 py-5">
+                                            {lead.email ? (
+                                                <a href={`mailto:${lead.email}`} className="text-xs font-mono text-blue-400 hover:underline flex items-center gap-1">
+                                                    @ {lead.email}
+                                                </a>
+                                            ) : <span className="text-xs text-slate-600">-</span>}
                                         </td>
                                         <td className="px-6 py-5 text-slate-400 max-w-[150px] truncate">{lead.company}</td>
                                         <td className="px-6 py-5 text-slate-500 max-w-[120px] truncate">{lead.location}</td>
