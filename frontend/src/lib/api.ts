@@ -13,6 +13,8 @@ export interface Lead {
     phone?: string;
     has_website?: boolean;
     status: string;
+    email?: string;
+    rating?: number;
     created_at?: string;
 }
 
