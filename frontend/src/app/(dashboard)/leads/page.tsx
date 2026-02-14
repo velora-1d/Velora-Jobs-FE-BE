@@ -5,7 +5,7 @@ import { api, Lead } from '@/lib/api';
 import {
     Loader2, ExternalLink, Database, Search, Download, Zap,
     MessageCircle, X, Copy, Check, Send, ChevronDown, Phone,
-    Building2, School, ShoppingBag, Briefcase, CheckCircle2, XCircle, Download
+    Building2, School, ShoppingBag, Briefcase, CheckCircle2, XCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
