@@ -7,7 +7,7 @@ from datetime import timedelta
 import asyncio
 import os
 from auth import verify_password, get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
-from models import User
+from models import User, Lead, Setting
 
 app = FastAPI(title="Velora Jobs API")
 
@@ -175,7 +175,6 @@ async def scrape(
 async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie, proxy, interrupt_event):
     global SCRAPER_RUNNING
     from scraper import JobScraper
-    from models import Lead
     from ai_scorer import score_lead
     from database import SessionLocal
 
