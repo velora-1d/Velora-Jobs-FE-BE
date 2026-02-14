@@ -21,6 +21,7 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Run commands
-# Run commands
-CMD ["gunicorn", "main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
+# Run with 1 worker — required because scraper uses in-memory global state
+# (SCRAPER_LOGS, SCRAPER_RUNNING). Multiple workers = each has its own state copy.
+# Uvicorn's async model handles concurrency within the single worker.
+CMD ["gunicorn", "main:app", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "300"]
