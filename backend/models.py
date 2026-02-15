@@ -148,3 +148,14 @@ class Prospect(Base):
     source_keyword = Column(String, nullable=True)    # Keyword used during scraping
     created_at = Column(DateTime, default=get_wib_now, index=True)
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
+
+class ActivityLog(Base):
+    """Centralized audit log for all AI and automation activities."""
+    __tablename__ = "activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String, index=True)  # scraper, ai_scoring, campaign, system, enrichment
+    level = Column(String, default="info", index=True)  # info, warning, error
+    message = Column(Text, nullable=False)  # Human-readable description
+    metadata = Column(Text, nullable=True)  # JSON string for extra details (AI reasoning, stats, etc.)
+    created_at = Column(DateTime, default=get_wib_now, index=True)

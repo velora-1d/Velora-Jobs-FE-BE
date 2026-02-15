@@ -12,6 +12,8 @@ import LeadSourceChart from '@/components/analytics/LeadSourceChart';
 import ScoreChart from '@/components/analytics/ScoreChart';
 import FunnelChart from '@/components/analytics/FunnelChart';
 import WeeklyChart from '@/components/analytics/WeeklyChart';
+import AIBriefingCard from '@/components/analytics/AIBriefingCard';
+import SystemLogs from '@/components/analytics/SystemLogs';
 
 export default function Dashboard() {
   const { data: leads, error: leadsError } = useSWR<Lead[]>(`${api.API_URL}/api/leads`, fetcher);
@@ -96,6 +98,12 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* AI Specialist Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+        <AIBriefingCard />
+        <SystemLogs />
       </div>
 
       {/* Recent Leads Table */}

@@ -1264,6 +1264,124 @@ async def get_stats(db: Session = Depends(get_db), current_user: User = Depends(
         "weekly": weekly,
     }
 
+# --- Activity Logs ---
+@app.get("/api/logs")
+async def get_activity_logs(
+    limit: int = 50,
+    category: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from models import ActivityLog
+    
+    query = db.query(ActivityLog)
+    if category:
+        query = query.filter(ActivityLog.category == category)
+    
+    logs = query.order_by(ActivityLog.created_at.desc()).limit(limit).all()
+    return logs
+
+# --- AI Mission Briefing ---
+@app.get("/api/stats/ai-briefing")
+async def get_ai_briefing(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Lead, Prospect, Campaign, ActivityLog
+    from ai_scorer import analyze_briefing
+    from datetime import datetime
+    import json
+    
+    # Gather stats
+    stats = {
+        "total_leads": db.query(Lead).count(),
+        "total_prospects": db.query(Prospect).count(),
+        "contacted": db.query(Lead).filter(Lead.status == "contacted").count(),
+        "won": db.query(Lead).filter(Lead.status == "won").count(),
+        "active_campaigns": db.query(Campaign).filter(Campaign.status == "active").count(),
+        "total_sent": sum(c.sent_count or 0 for c in db.query(Campaign).all()),
+        "total_failed": sum(c.failed_count or 0 for c in db.query(Campaign).all()),
+    }
+    
+    # Call DeepSeek-R1 for strategic advice
+    briefing = await analyze_briefing(stats)
+    
+    # Log this activity
+    log = ActivityLog(
+        category="ai_scoring",
+        level="info",
+        message="AI Mission Briefing generated",
+        metadata=json.dumps({"model": "deepseek-r1", "stats": stats}),
+        created_at=datetime.now()
+    )
+    db.add(log)
+    db.commit()
+    
+    return {"briefing": briefing, "stats": stats}
+
+# --- Lead Enrichment (Kimi-K2) ---
+@app.post("/api/leads/{lead_id}/enrich")
+async def enrich_lead(
+    lead_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from models import Lead, ActivityLog
+    from ai_scorer import enrich_web_data
+    from datetime import datetime
+    import json
+    
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Extract website from lead description or URL
+    website_url = lead.url or "No website available"
+    
+    # Call Kimi-K2 for deep analysis
+    enrichment = await enrich_web_data(website_url, lead.company)
+    
+    # Log this activity
+    log = ActivityLog(
+        category="enrichment",
+        level="info",
+        message=f"Lead #{lead_id} enriched via Kimi-K2",
+        metadata=json.dumps({"model": "kimi-k2", "lead_id": lead_id, "result": enrichment}),
+        created_at=datetime.now()
+    )
+    db.add(log)
+    db.commit()
+    
+    return {"lead_id": lead_id, "enrichment": enrichment}
+
+# --- Campaign Template Generator (GLM-4) ---
+@app.post("/api/campaigns/generate-template")
+async def generate_template(
+    target_category: str,
+    service_type: str,
+    tone: str = "professional",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from models import ActivityLog
+    from ai_scorer import generate_campaign_template
+    from datetime import datetime
+    import json
+    
+    # Call GLM-4 for creative copywriting
+    template = await generate_campaign_template(target_category, service_type, tone)
+    
+    # Log this activity
+    log = ActivityLog(
+        category="campaign",
+        level="info",
+        message=f"Campaign template generated for {target_category}",
+        metadata=json.dumps({"model": "glm-4", "category": target_category, "service": service_type}),
+        created_at=datetime.now()
+    )
+    db.add(log)
+    db.commit()
+    
+    return {"template": template, "category": target_category, "service": service_type}
+
+
 # --- Telegram ---
 
 @app.post("/api/telegram/test")

@@ -91,6 +91,35 @@ export interface Stats {
     weekly: { date: string; leads: number; prospects: number }[];
 }
 
+export interface ActivityLog {
+    id: number;
+    category: string;
+    level: string;
+    message: string;
+    metadata?: string;
+    created_at: string;
+}
+
+export interface AIBriefing {
+    briefing: string;
+    stats: Record<string, number>;
+}
+
+export interface AIEnrichment {
+    lead_id: number;
+    enrichment: {
+        emails: string[];
+        keywords: string[];
+        pain_points: string;
+    };
+}
+
+export interface AITemplate {
+    template: string;
+    category: string;
+    service: string;
+}
+
 export interface Campaign {
     id: number;
     name: string;
@@ -372,6 +401,27 @@ export const api = {
 
     async deleteProspect(id: number) {
         return authFetch(`${API_URL}/api/prospects/${id}`, { method: 'DELETE' });
+    },
+
+    // ─── AI Specialist Quartet ───
+    async getActivityLogs(limit: number = 50, category?: string): Promise<ActivityLog[]> {
+        const params = new URLSearchParams();
+        params.append('limit', String(limit));
+        if (category) params.append('category', category);
+        return authFetch(`${API_URL}/api/logs?${params.toString()}`);
+    },
+
+    async getAIBriefing(): Promise<AIBriefing> {
+        return authFetch(`${API_URL}/api/stats/ai-briefing`);
+    },
+
+    async enrichLead(leadId: number): Promise<AIEnrichment> {
+        return authFetch(`${API_URL}/api/leads/${leadId}/enrich`, { method: 'POST' });
+    },
+
+    async generateTemplate(targetCategory: string, serviceType: string, tone: string = 'professional'): Promise<AITemplate> {
+        const params = new URLSearchParams({ target_category: targetCategory, service_type: serviceType, tone });
+        return authFetch(`${API_URL}/api/campaigns/generate-template?${params.toString()}`, { method: 'POST' });
     },
 
     // ─── Export (CSV) ───

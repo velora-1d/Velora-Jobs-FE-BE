@@ -229,16 +229,38 @@ class ProspectUpdate(BaseModel):
     category: Optional[str] = None
     address: Optional[str] = None
     phone: Optional[str] = None
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     website: Optional[str] = None
     has_website: Optional[bool] = None
-    status: Optional[str] = None
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
     match_score: Optional[float] = None
     match_reason: Optional[str] = None
+    status: Optional[str] = None
 
-class ProspectResponse(ProspectBase, TimestampMixin):
+class Prospect(ProspectBase, TimestampMixin):
     id: int
+    maps_url: str
 
+# ---------------------------------------------------------------------
+# ACTIVITY LOG MODELS
+# ---------------------------------------------------------------------
+
+class ActivityLogBase(BaseModel):
+    category: str  # scraper, ai_scoring, campaign, system, enrichment
+    level: str = "info"  # info, warning, error
+    message: str
+    metadata: Optional[str] = None  # JSON string
+
+class ActivityLogCreate(ActivityLogBase):
+    pass
+
+class ActivityLog(ActivityLogBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 # ---------------------------------------------------------------------
 # SETTINGS & MISC
 # ---------------------------------------------------------------------
