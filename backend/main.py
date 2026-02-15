@@ -530,7 +530,7 @@ async def delete_lead(lead_id: int, db: Session = Depends(get_db), current_user:
 # PROSPECT CRUD (Google Maps Business Prospects)
 # ---------------------------------------------------------------------
 
-@app.get("/api/prospects", response_model=List[schemas.ProspectResponse])
+@app.get("/api/prospects", response_model=List[schemas.Prospect])
 async def get_prospects(
     start_date: str = None,
     end_date: str = None, 
@@ -567,7 +567,7 @@ async def get_prospect_stats(db: Session = Depends(get_db), current_user: User =
         "without_website": no_web,
     }
 
-@app.post("/api/prospects", response_model=schemas.ProspectResponse)
+@app.post("/api/prospects", response_model=schemas.Prospect)
 async def create_prospect(data: schemas.ProspectCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     prospect = Prospect(
         name=data.name,
@@ -590,7 +590,7 @@ async def create_prospect(data: schemas.ProspectCreate, db: Session = Depends(ge
     db.refresh(prospect)
     return prospect
 
-@app.put("/api/prospects/{prospect_id}", response_model=schemas.ProspectResponse)
+@app.put("/api/prospects/{prospect_id}", response_model=schemas.Prospect)
 async def update_prospect(prospect_id: int, data: schemas.ProspectUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     prospect = db.query(Prospect).filter(Prospect.id == prospect_id).first()
     if not prospect:
