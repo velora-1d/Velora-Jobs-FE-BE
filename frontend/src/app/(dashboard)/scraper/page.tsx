@@ -5,7 +5,8 @@ import { api } from '@/lib/api';
 import {
     Play, Square, Terminal, Settings, Shield, AlertTriangle,
     Database, Globe, Search, Download, Trash2, Linkedin, ExternalLink, Briefcase, ClipboardList, Palmtree,
-    MapPinned, Building2, School, ShoppingBag, Code2, Cpu, Zap, ChevronUp, ChevronDown, MapPin, CheckSquare
+    MapPinned, Building2, School, ShoppingBag, Code2, Cpu, Zap, ChevronUp, ChevronDown, MapPin, CheckSquare,
+    FolderOpen, Share2, Target, Users
 } from 'lucide-react';
 
 // ─── Source Configuration ────────────────────────────────
@@ -19,49 +20,101 @@ const ALL_SOURCES = [
 
 // ─── Keyword Preset Templates ────────────────────────────
 const PRESETS = [
+    // 1. Google Maps (Local Business)
     {
-        id: 'pesantren',
-        Icon: Building2,
-        label: 'Pesantren Hunter',
-        desc: 'Cari pondok pesantren yang butuh website & sistem digital',
-        keywords: 'Pondok Pesantren',
-        location: 'Jawa Timur',
+        id: 'gmaps_biz',
+        Icon: MapPin,
+        label: 'Local Business',
+        desc: 'UMKM, Klinik, Travel, Kontraktor, Resto, Koperasi',
+        keywords: 'Klinik Kecantikan',
+        location: 'Jakarta Selatan',
         sources: ['gmaps'],
-        variants: ['Pondok Pesantren', 'Pesantren Modern', 'Pesantren Tahfidz', 'Madrasah Aliyah'],
-        color: 'from-emerald-500/20 to-teal-500/10 border-emerald-500/30',
+        variants: ['Klinik Gigi', 'Travel Umroh', 'Kontraktor Sipil', 'Restoran Padang', 'Koperasi Simpan Pinjam', 'Sekolah Swasta'],
+        color: 'from-blue-500/20 to-cyan-500/10 border-blue-500/30',
     },
+    // 2. LinkedIn (Decision Makers)
     {
-        id: 'sekolah',
-        Icon: School,
-        label: 'Sekolah Finder',
-        desc: 'Sekolah swasta, bimbel, dan lembaga kursus',
-        keywords: 'Sekolah Swasta',
-        location: 'Jakarta',
-        sources: ['gmaps'],
-        variants: ['Sekolah Swasta', 'SMA Swasta', 'Bimbel', 'Lembaga Kursus'],
-        color: 'from-blue-500/20 to-indigo-500/10 border-blue-500/30',
+        id: 'linkedin_founders',
+        Icon: Users,
+        label: 'Decision Makers',
+        desc: 'Founder, CEO, Owner, Director (Non-Job Search)',
+        keywords: 'Founder',
+        location: 'Indonesia',
+        sources: ['linkedin'],
+        variants: ['Co-founder', 'Owner', 'Director', 'Head of Operations', 'Marketing Director'],
+        color: 'from-blue-700/20 to-indigo-500/10 border-blue-700/30',
     },
+    // 3. Job Boards (Hiring Signals)
     {
-        id: 'umkm',
-        Icon: ShoppingBag,
-        label: 'UMKM Scanner',
-        desc: 'Bisnis lokal: catering, konveksi, percetakan',
-        keywords: 'Catering',
-        location: 'Surabaya',
-        sources: ['gmaps'],
-        variants: ['Catering', 'Konveksi', 'Percetakan', 'Toko Online', 'Frozen Food'],
-        color: 'from-amber-500/20 to-orange-500/10 border-amber-500/30',
-    },
-    {
-        id: 'developer',
-        Icon: Code2,
-        label: 'Dev Jobs',
-        desc: 'Lowongan fullstack developer lokal & internasional',
+        id: 'job_boards',
+        Icon: Briefcase,
+        label: 'Hiring Companies',
+        desc: 'Perusahaan yang sedang merekrut (Butuh solusi)',
         keywords: 'Fullstack Developer',
         location: 'Remote',
-        sources: ['linkedin', 'upwork', 'indeed', 'glints'],
-        variants: ['Fullstack Developer', 'React Developer', 'Next.js Developer', 'Laravel Developer'],
-        color: 'from-violet-500/20 to-purple-500/10 border-violet-500/30',
+        sources: ['linkedin', 'glints', 'jobstreet', 'indeed', 'karir'],
+        variants: ['Mobile Developer', 'System Analyst', 'UI/UX Designer', 'Digital Marketing'],
+        color: 'from-emerald-500/20 to-teal-500/10 border-emerald-500/30',
+    },
+    // 4. Freelance Marketplaces
+    {
+        id: 'freelance',
+        Icon: Globe,
+        label: 'Freelance Projects',
+        desc: 'Proyek lepas di Upwork, Freelancer, Projects.co.id',
+        keywords: 'Web Development',
+        location: 'Anywhere',
+        sources: ['upwork', 'freelancer', 'sribulancer', 'projects.co.id', 'fiverr'],
+        variants: ['Mobile App', 'SEO Optimization', 'Copywriting', 'Logo Design'],
+        color: 'from-green-500/20 to-lime-500/10 border-green-500/30',
+    },
+    // 5. Agencies
+    {
+        id: 'agency',
+        Icon: Building2,
+        label: 'Agency Partner',
+        desc: 'Web Agency, Digital Agency, Creative House',
+        keywords: 'Digital Agency',
+        location: 'Bandung',
+        sources: ['gmaps', 'linkedin'],
+        variants: ['Web Design Agency', 'Software House', 'Creative Agency', 'Advertising Agency'],
+        color: 'from-purple-500/20 to-pink-500/10 border-purple-500/30',
+    },
+    // 6. Directory & Public Data
+    {
+        id: 'directory',
+        Icon: FolderOpen,
+        label: 'Directories',
+        desc: 'Direktori UMKM, Asosiasi Bisnis, Listing Vendor',
+        keywords: 'Daftar UMKM',
+        location: 'Indonesia',
+        sources: ['google'],
+        variants: ['Asosiasi Pengusaha', 'Vendor List', 'Yellow Pages', 'Marketplace B2B'],
+        color: 'from-amber-500/20 to-orange-500/10 border-amber-500/30',
+    },
+    // 7. Social Media (Local Biz)
+    {
+        id: 'social',
+        Icon: Share2,
+        label: 'Social Media',
+        desc: 'Instagram Bisnis, Facebook Groups',
+        keywords: 'Jual Baju Muslim',
+        location: 'Instagram',
+        sources: ['instagram', 'facebook'],
+        variants: ['Fashion Brand', 'Kuliner Viral', 'Jasa Dekorasi', 'MUA Wedding'],
+        color: 'from-rose-500/20 to-red-500/10 border-rose-500/30',
+    },
+    // 8. Direct Company
+    {
+        id: 'company',
+        Icon: Target,
+        label: 'Direct Company',
+        desc: 'Website perusahaan langsung (Career page)',
+        keywords: 'Career Page',
+        location: 'Indonesia',
+        sources: ['google'],
+        variants: ['Lowongan Kerja Website', 'Recruitment Page', 'Join Us Page'],
+        color: 'from-slate-500/20 to-gray-500/10 border-slate-500/30',
     },
 ];
 

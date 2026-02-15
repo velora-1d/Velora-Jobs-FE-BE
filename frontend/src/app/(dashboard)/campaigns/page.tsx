@@ -6,10 +6,11 @@ import {
     Send, Users, Zap, Plus, X, Edit, Trash2, Calendar, Play, Pause,
     Search, FileText, Copy, Tag, Rocket, BarChart2, Eye
 } from 'lucide-react';
-import { api, fetcher, Campaign, PromotionTemplate } from '@/lib/api';
+import { api, fetcher, Campaign, PromotionTemplate, AITemplate } from '@/lib/api';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { StatusBadge } from '@/components/shared/Badges';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
+import AITemplateGenerator from '@/components/analytics/AITemplateGenerator';
 
 // ─── Variable Picker ────────────────────────
 const AVAILABLE_VARS = [
@@ -266,6 +267,12 @@ export default function CampaignsPage() {
         setForm(prev => ({ ...prev, message_template: prev.message_template + v }));
     };
 
+    const handleAIUseTemplate = (content: string) => {
+        setTForm(prev => ({ ...prev, content: content }));
+        setShowTemplateModal(true);
+        setEditTemplateId(null); // New template
+    };
+
     return (
         <div className="w-full h-[calc(100vh-8rem)] flex flex-col">
             {/* ─── HEADER ─── */}
@@ -371,6 +378,9 @@ export default function CampaignsPage() {
             {/* ─── TEMPLATES TAB ─── */}
             {activeTab === 'templates' && (
                 <div className="flex-1 overflow-y-auto">
+                    <div className="mb-8">
+                        <AITemplateGenerator onUseTemplate={handleAIUseTemplate} />
+                    </div>
                     {templates.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
                             <FileText className="w-20 h-20 text-primary/20 mb-6" />
