@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from database import init_db, get_db, SessionLocal
 from sqlalchemy.orm import Session
@@ -8,10 +8,23 @@ import asyncio
 import os
 from auth import verify_password, get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from models import User, Lead, Setting
+import schemas
+from typing import List
 
 app = FastAPI(title="Velora Jobs API")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
+
+# Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    return response
 
 # Initialize database and default user
 @app.on_event("startup")
@@ -20,19 +33,19 @@ def on_startup():
     
     # Create default user if not exists
     db = next(get_db())
-    default_email = os.getenv("ADMIN_EMAIL", "email.jobs@velora.com")
-    default_pass = os.getenv("ADMIN_PASSWORD", "admin123")
+    default_email = os.getenv("ADMIN_EMAIL")
+    default_pass = os.getenv("ADMIN_PASSWORD")
     
     try:
         user = db.query(User).filter(User.email == default_email).first()
-        if not user:
+        if not user and default_email and default_pass:
             hashed_password = get_password_hash(default_pass)
             new_user = User(email=default_email, hashed_password=hashed_password)
             db.add(new_user)
             db.commit()
             print(f"Default user created: {default_email}")
         else:
-            print("Default user already exists.")
+            print("Default user check complete.")
     finally:
         db.close()
 
@@ -42,7 +55,7 @@ origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=False,
+    allow_credentials=True, # Changed to True for frontend to backend comms if needed (verify)
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -70,7 +83,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     return user
 
 @app.post("/api/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -176,6 +189,8 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
     global SCRAPER_RUNNING
     from scraper import JobScraper
     from ai_scorer import score_lead
+    # from campaign_runner import campaign_runner # Avoid circular import if needed
+    import asyncio
     from database import SessionLocal
 
     log_message(f"🚀 Starting background scrape for '{keywords}'")
@@ -209,6 +224,8 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
                         title=item['title'],
                         company=item['company'],
                         description=item.get('description', ''),
+                        has_website=item.get('has_website', True),
+                        category=item.get('company', '') # In GMaps, company field often holds the category
                     )
                 except Exception as ai_e:
                     log_message(f"⚠️ AI Scorer error: {str(ai_e)}")
@@ -248,7 +265,7 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
         SCRAPER_RUNNING = False
         log_message("💤 Scraper task ended.")
 
-@app.get("/api/leads")
+@app.get("/api/leads", response_model=List[schemas.LeadResponse])
 async def get_leads(
     start_date: str = None,
     end_date: str = None,
@@ -280,42 +297,99 @@ async def get_leads(
 
     return query.order_by(Lead.id.desc()).all()
 
-@app.post("/api/leads")
-async def create_lead(payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@app.get("/api/campaigns", response_model=List[schemas.CampaignResponse])
+async def get_campaigns(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Campaign
+    camp = db.query(Campaign).order_by(Campaign.created_at.desc()).all()
+    return camp
+
+@app.post("/api/campaigns", response_model=schemas.CampaignResponse)
+async def create_campaign(campaign_in: schemas.CampaignCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Campaign
+    
+    # Logic similar to before, but validation handled by Pydantic
+    camp = Campaign(
+        name=campaign_in.name,
+        status=campaign_in.status,
+        message_template=campaign_in.message_template,
+        target_criteria=campaign_in.target_criteria,
+        scheduled_at=campaign_in.scheduled_at
+    )
+    db.add(camp)
+    db.commit()
+    db.refresh(camp)
+    return camp
+
+@app.put("/api/campaigns/{id}", response_model=schemas.CampaignResponse)
+async def update_campaign(id: int, campaign_in: schemas.CampaignUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Campaign
+    
+    camp = db.query(Campaign).filter(Campaign.id == id).first()
+    if not camp:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    update_data = campaign_in.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(camp, key, value)
+    
+    db.commit()
+    db.refresh(camp)
+    return camp
+
+@app.delete("/api/campaigns/{id}")
+async def delete_campaign(id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Campaign
+    
+    camp = db.query(Campaign).filter(Campaign.id == id).first()
+    if not camp:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    db.delete(camp)
+    db.commit()
+    return {"status": "deleted"}
+
+# ... (campaign runner endpoints remain same, as they use ID only)
+
+@app.post("/api/leads", response_model=schemas.LeadResponse)
+async def create_lead(lead_in: schemas.LeadCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import Lead
     
     lead = Lead(
-        title=payload.get("title", "New Lead"),
-        company=payload.get("company", "Unknown"),
-        location=payload.get("location", ""),
-        description=payload.get("description", ""),
-        url=payload.get("url", ""),
-        source=payload.get("source", "Manual"),
-        status=payload.get("status", "new"),
-        email=payload.get("email"),
-        phone=payload.get("phone"),
-        rating=payload.get("rating"),
-        match_score=payload.get("match_score"),
+        title=lead_in.title,
+        company=lead_in.company,
+        location=lead_in.location,
+        description=lead_in.description,
+        url=lead_in.url,
+        source=lead_in.source,
+        status=lead_in.status,
+        email=lead_in.email,
+        phone=lead_in.phone,
+        rating=lead_in.rating,
+        match_score=lead_in.match_score,
+        match_reason=lead_in.match_reason,
+        has_website=lead_in.has_website
     )
     db.add(lead)
     db.commit()
     db.refresh(lead)
-    return {"id": lead.id, "status": "created"}
+    return lead
 
-@app.put("/api/leads/{lead_id}")
-async def update_lead(lead_id: int, payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@app.put("/api/leads/{lead_id}", response_model=schemas.LeadResponse)
+async def update_lead(lead_id: int, lead_in: schemas.LeadUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import Lead
     
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
-    for key, value in payload.items():
-        if hasattr(lead, key):
-            setattr(lead, key, value)
+    # Update fields that are provided
+    update_data = lead_in.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(lead, key, value)
             
     db.commit()
-    return {"id": lead.id, "status": "updated"}
+    db.refresh(lead)
+    return lead
 
 @app.delete("/api/leads/{lead_id}")
 async def delete_lead(lead_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -325,7 +399,7 @@ async def delete_lead(lead_id: int, db: Session = Depends(get_db), current_user:
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
         
-    # Cascade delete related items (optional, but good for cleanup)
+    # Cascade delete related items (OR relies on DB cascade, but manual here for safety)
     db.query(FollowUp).filter(FollowUp.lead_id == lead_id).delete()
     db.query(Project).filter(Project.lead_id == lead_id).delete()
     
@@ -333,6 +407,62 @@ async def delete_lead(lead_id: int, db: Session = Depends(get_db), current_user:
     db.commit()
     return {"status": "deleted"}
 
+# ---------------------------------------------------------------------
+# CAMPAIGN RUNNER CONTROL
+# ---------------------------------------------------------------------
+
+@app.post("/api/campaigns/{id}/launch")
+async def launch_campaign(id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    if campaign_runner.is_running:
+        raise HTTPException(status_code=400, detail="A campaign is already running.")
+    
+    # Verify campaign exists
+    camp = db.query(Campaign).filter(Campaign.id == id).first()
+    if not camp:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+    
+    # Start in background
+    background_tasks.add_task(campaign_runner.run_campaign, db, id)
+    return {"status": "started", "campaign": camp.name}
+
+@app.get("/api/campaigns/status")
+def get_campaign_status():
+    return campaign_runner.status
+
+@app.post("/api/campaigns/stop")
+def stop_campaign():
+    campaign_runner.stop()
+    return {"status": "stopping"}
+@app.post("/api/send-wa")
+async def send_wa_individual(payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Send a single WhatsApp message via Fonnte."""
+    phone = payload.get("phone")
+    message = payload.get("message")
+    lead_id = payload.get("lead_id")
+
+    if not phone or not message:
+        raise HTTPException(status_code=400, detail="Phone and message are required")
+
+    from campaign_runner import campaign_runner
+    success = await campaign_runner._send_via_fonnte(
+        Lead(phone=phone, title="Contact", company=""), # Temporary object for helper
+        message
+    )
+
+    if success and lead_id:
+        # Record as FollowUp
+        from models import FollowUp, get_wib_now
+        followup = FollowUp(
+            lead_id=lead_id,
+            type="wa_individual",
+            note="Sent via Individual Outreach",
+            status="done",
+            created_at=get_wib_now()
+        )
+        db.add(followup)
+        db.commit()
+
+    return {"success": success}
 # --- Settings API ---
 
 @app.get("/api/settings")
@@ -357,10 +487,16 @@ async def get_settings(db: Session = Depends(get_db), current_user: User = Depen
     return response
 
 @app.post("/api/settings")
-async def update_settings(config: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def update_settings(config: schemas.SettingsUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import Setting
     
-    for key, value in config.items():
+    # Convert Pydantic model to dict, exclude None to allow partial updates if needed,
+    # but here we usually send full form.
+    config_dict = config.dict(exclude_unset=True)
+    
+    for key, value in config_dict.items():
+        if value is None: continue 
+        
         setting = db.query(Setting).filter(Setting.key == key).first()
         if not setting:
             setting = Setting(key=key, value=str(value))
@@ -369,19 +505,19 @@ async def update_settings(config: dict, db: Session = Depends(get_db), current_u
             setting.value = str(value)
     
     db.commit()
-    return {"status": "updated", "config": config}
+    return {"status": "updated", "config": config_dict}
 
 # --- WhatsApp (Fonnte) API ---
 
 @app.post("/api/wa/send")
-async def send_whatsapp(payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def send_whatsapp(payload: schemas.WhatsAppSend, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Send WhatsApp message via Fonnte API."""
     import httpx
     from models import Setting, Lead
     
-    target = payload.get("target", "")
-    message = payload.get("message", "")
-    lead_id = payload.get("lead_id")
+    target = payload.target
+    message = payload.message
+    lead_id = payload.lead_id
     
     if not target or not message:
         return {"success": False, "error": "target and message required"}
@@ -437,75 +573,94 @@ async def send_whatsapp(payload: dict, db: Session = Depends(get_db), current_us
 # ──── FOLLOW-UP API ────
 # ═══════════════════════════════════════════════════
 
-@app.get("/api/followups")
+@app.get("/api/followups", response_model=List[schemas.FollowUpResponse])
 async def get_followups(lead_id: int = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import FollowUp, Lead
-    query = db.query(FollowUp).order_by(FollowUp.created_at.desc())
+    from sqlalchemy.orm import joinedload
+    
+    query = db.query(FollowUp).options(joinedload(FollowUp.lead)).order_by(FollowUp.created_at.desc())
+    
     if lead_id:
         query = query.filter(FollowUp.lead_id == lead_id)
     follow_ups = query.all()
+    
+    # Map to schema (Pydantic orm_mode handles most, but we need flattened fields)
     results = []
     for fu in follow_ups:
-        lead = db.query(Lead).filter(Lead.id == fu.lead_id).first()
         results.append({
             "id": fu.id,
             "lead_id": fu.lead_id,
-            "lead_title": lead.title if lead else "Unknown",
-            "lead_company": lead.company if lead else "",
+            "lead_title": fu.lead.title if fu.lead else "Unknown",
+            "lead_company": fu.lead.company if fu.lead else "",
             "type": fu.type,
             "note": fu.note,
             "status": fu.status,
-            "next_follow_date": str(fu.next_follow_date) if fu.next_follow_date else None,
-            "created_at": fu.created_at.isoformat() if fu.created_at else None,
+            "next_follow_date": fu.next_follow_date,
+            "created_at": fu.created_at,
+            "updated_at": fu.updated_at
         })
     return results
 
-@app.post("/api/followups")
-async def create_followup(payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@app.post("/api/followups", response_model=schemas.FollowUpResponse)
+async def create_followup(fu_in: schemas.FollowUpCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import FollowUp, Lead
-    from datetime import date
     
-    lead_id = payload.get("lead_id")
-    if not lead_id:
-        raise HTTPException(status_code=400, detail="lead_id is required")
-    
-    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    lead = db.query(Lead).filter(Lead.id == fu_in.lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
-    next_date = None
-    if payload.get("next_follow_date"):
-        next_date = date.fromisoformat(payload["next_follow_date"])
-    
     fu = FollowUp(
-        lead_id=lead_id,
-        type=payload.get("type", "wa"),
-        note=payload.get("note", ""),
-        status=payload.get("status", "pending"),
-        next_follow_date=next_date,
+        lead_id=fu_in.lead_id,
+        type=fu_in.type,
+        note=fu_in.note,
+        status=fu_in.status,
+        next_follow_date=fu_in.next_follow_date,
     )
     db.add(fu)
     db.commit()
     db.refresh(fu)
-    return {"id": fu.id, "status": "created"}
+    
+    # Return with manual mapping for flattened fields
+    return {
+        "id": fu.id,
+        "lead_id": fu.lead_id,
+        "lead_title": lead.title,
+        "lead_company": lead.company,
+        "type": fu.type,
+        "note": fu.note,
+        "status": fu.status,
+        "next_follow_date": fu.next_follow_date,
+        "created_at": fu.created_at,
+        "updated_at": fu.updated_at
+    }
 
-@app.put("/api/followups/{fu_id}")
-async def update_followup(fu_id: int, payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@app.put("/api/followups/{fu_id}", response_model=schemas.FollowUpResponse)
+async def update_followup(fu_id: int, fu_in: schemas.FollowUpUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import FollowUp
-    from datetime import date
     
     fu = db.query(FollowUp).filter(FollowUp.id == fu_id).first()
     if not fu:
         raise HTTPException(status_code=404, detail="Follow-up not found")
     
-    if "type" in payload: fu.type = payload["type"]
-    if "note" in payload: fu.note = payload["note"]
-    if "status" in payload: fu.status = payload["status"]
-    if "next_follow_date" in payload:
-        fu.next_follow_date = date.fromisoformat(payload["next_follow_date"]) if payload["next_follow_date"] else None
+    update_data = fu_in.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(fu, key, value)
     
     db.commit()
-    return {"id": fu.id, "status": "updated"}
+    db.refresh(fu)
+    
+    return {
+        "id": fu.id,
+        "lead_id": fu.lead_id,
+        "lead_title": fu.lead.title if fu.lead else None,
+        "lead_company": fu.lead.company if fu.lead else None,
+        "type": fu.type,
+        "note": fu.note,
+        "status": fu.status,
+        "next_follow_date": fu.next_follow_date,
+        "created_at": fu.created_at,
+        "updated_at": fu.updated_at
+    }
 
 @app.delete("/api/followups/{fu_id}")
 async def delete_followup(fu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -523,88 +678,118 @@ async def delete_followup(fu_id: int, db: Session = Depends(get_db), current_use
 # ──── PROJECT API ────
 # ═══════════════════════════════════════════════════
 
-@app.get("/api/projects")
+@app.get("/api/projects", response_model=List[schemas.ProjectResponse])
 async def get_projects(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    from models import Project, Lead, Invoice
-    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+    from models import Project, Invoice
+    from sqlalchemy.orm import joinedload
+    
+    # Eager load relationships to avoid N+1 queries
+    projects = db.query(Project).options(
+        joinedload(Project.lead), 
+        joinedload(Project.invoices)
+    ).order_by(Project.created_at.desc()).all()
+    
     results = []
     for p in projects:
-        lead = db.query(Lead).filter(Lead.id == p.lead_id).first()
-        invoice_count = db.query(Invoice).filter(Invoice.project_id == p.id).count()
-        total_invoiced = sum(i.total for i in db.query(Invoice).filter(Invoice.project_id == p.id).all())
-        total_paid = sum(i.total for i in db.query(Invoice).filter(Invoice.project_id == p.id, Invoice.status == "paid").all())
+        # Aggregations
+        total_invoiced = sum(i.total for i in p.invoices)
+        total_paid = sum(i.total for i in p.invoices if i.status == "paid")
+        
         results.append({
             "id": p.id,
             "lead_id": p.lead_id,
-            "lead_title": lead.title if lead else "Unknown",
-            "lead_company": lead.company if lead else "",
+            "lead_title": p.lead.title if p.lead else "Unknown",
+            "lead_company": p.lead.company if p.lead else "",
             "name": p.name,
             "description": p.description,
             "status": p.status,
             "budget": p.budget,
-            "deadline": str(p.deadline) if p.deadline else None,
+            "deadline": p.deadline,
             "progress": p.progress,
-            "invoice_count": invoice_count,
+            "invoice_count": len(p.invoices),
             "total_invoiced": total_invoiced,
             "total_paid": total_paid,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "created_at": p.created_at,
+            "updated_at": p.updated_at
         })
     return results
 
-@app.post("/api/projects")
-async def create_project(payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@app.post("/api/projects", response_model=schemas.ProjectResponse)
+async def create_project(project_in: schemas.ProjectCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import Project, Lead
-    from datetime import date
     
-    lead_id = payload.get("lead_id")
-    name = payload.get("name")
-    if not lead_id or not name:
-        raise HTTPException(status_code=400, detail="lead_id and name required")
-    
-    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    lead = db.query(Lead).filter(Lead.id == project_in.lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
     # Update lead status to won
     lead.status = "won"
     
-    deadline = None
-    if payload.get("deadline"):
-        deadline = date.fromisoformat(payload["deadline"])
-    
     project = Project(
-        lead_id=lead_id,
-        name=name,
-        description=payload.get("description", ""),
-        status=payload.get("status", "negotiation"),
-        budget=payload.get("budget"),
-        deadline=deadline,
-        progress=0,
+        lead_id=project_in.lead_id,
+        name=project_in.name,
+        description=project_in.description,
+        status=project_in.status,
+        budget=project_in.budget,
+        deadline=project_in.deadline,
+        progress=project_in.progress,
     )
     db.add(project)
     db.commit()
     db.refresh(project)
-    return {"id": project.id, "status": "created"}
+    
+    return {
+        "id": project.id,
+        "lead_id": project.lead_id,
+        "lead_title": lead.title,
+        "lead_company": lead.company,
+        "name": project.name,
+        "description": project.description,
+        "status": project.status,
+        "budget": project.budget,
+        "deadline": project.deadline,
+        "progress": project.progress,
+        "invoice_count": 0,
+        "total_invoiced": 0,
+        "total_paid": 0,
+        "created_at": project.created_at,
+        "updated_at": project.updated_at
+    }
 
-@app.put("/api/projects/{project_id}")
-async def update_project(project_id: int, payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@app.put("/api/projects/{project_id}", response_model=schemas.ProjectResponse)
+async def update_project(project_id: int, project_in: schemas.ProjectUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import Project
-    from datetime import date
     
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    if "name" in payload: project.name = payload["name"]
-    if "description" in payload: project.description = payload["description"]
-    if "status" in payload: project.status = payload["status"]
-    if "budget" in payload: project.budget = payload["budget"]
-    if "progress" in payload: project.progress = payload["progress"]
-    if "deadline" in payload:
-        project.deadline = date.fromisoformat(payload["deadline"]) if payload["deadline"] else None
+    update_data = project_in.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(project, key, value)
     
     db.commit()
-    return {"id": project.id, "status": "updated"}
+    db.refresh(project)
+    
+    # For response, we need to re-calculate stats or return basic info
+    # Re-fetching is safer for relations
+    return {
+        "id": project.id,
+        "lead_id": project.lead_id,
+        "lead_title": project.lead.title if project.lead else None,
+        "lead_company": project.lead.company if project.lead else None,
+        "name": project.name,
+        "description": project.description,
+        "status": project.status,
+        "budget": project.budget,
+        "deadline": project.deadline,
+        "progress": project.progress,
+        "invoice_count": len(project.invoices),
+        "total_invoiced": sum(i.total for i in project.invoices),
+        "total_paid": sum(i.total for i in project.invoices if i.status == "paid"),
+        "created_at": project.created_at,
+        "updated_at": project.updated_at
+    }
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project(project_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -614,7 +799,7 @@ async def delete_project(project_id: int, db: Session = Depends(get_db), current
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Cascade delete invoices
+    # Cascade delete invoices matches DB configuration usually, but explicit here
     db.query(Invoice).filter(Invoice.project_id == project_id).delete()
     
     db.delete(project)
@@ -625,49 +810,52 @@ async def delete_project(project_id: int, db: Session = Depends(get_db), current
 # ──── INVOICE API ────
 # ═══════════════════════════════════════════════════
 
-@app.get("/api/invoices")
+@app.get("/api/invoices", response_model=List[schemas.InvoiceResponse])
 async def get_invoices(project_id: int = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import Invoice, Project, Lead
+    from sqlalchemy.orm import joinedload
     import json
     
-    query = db.query(Invoice).order_by(Invoice.created_at.desc())
+    query = db.query(Invoice).options(
+        joinedload(Invoice.project).joinedload(Project.lead)
+    ).order_by(Invoice.created_at.desc())
+    
     if project_id:
         query = query.filter(Invoice.project_id == project_id)
     invoices = query.all()
     
     results = []
     for inv in invoices:
-        project = db.query(Project).filter(Project.id == inv.project_id).first()
-        lead = db.query(Lead).filter(Lead.id == project.lead_id).first() if project else None
+        # Pydantic doesn't automatically parse JSON string fields to List[dict], we need to handle it
+        # However, our schema expects List[InvoiceItem] for 'items'.
+        parsed_items = json.loads(inv.items) if inv.items else []
+        
         results.append({
             "id": inv.id,
             "project_id": inv.project_id,
-            "project_name": project.name if project else "Unknown",
-            "client_name": lead.company if lead else "Unknown",
+            "project_name": inv.project.name if inv.project else "Unknown",
+            "client_name": inv.project.lead.company if inv.project and inv.project.lead else "Unknown",
             "invoice_number": inv.invoice_number,
-            "items": json.loads(inv.items) if inv.items else [],
+            "items": parsed_items,
             "subtotal": inv.subtotal,
             "tax_percent": inv.tax_percent,
             "total": inv.total,
             "status": inv.status,
-            "due_date": str(inv.due_date) if inv.due_date else None,
-            "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
+            "due_date": inv.due_date,
+            "paid_at": inv.paid_at,
             "notes": inv.notes,
-            "created_at": inv.created_at.isoformat() if inv.created_at else None,
+            "created_at": inv.created_at,
+            "updated_at": inv.updated_at
         })
     return results
 
-@app.post("/api/invoices")
-async def create_invoice(payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@app.post("/api/invoices", response_model=schemas.InvoiceResponse)
+async def create_invoice(invoice_in: schemas.InvoiceCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import Invoice, Project
     from datetime import date
     import json
     
-    project_id = payload.get("project_id")
-    if not project_id:
-        raise HTTPException(status_code=400, detail="project_id required")
-    
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = db.query(Project).filter(Project.id == invoice_in.project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
@@ -675,36 +863,52 @@ async def create_invoice(payload: dict, db: Session = Depends(get_db), current_u
     from datetime import datetime
     now = datetime.utcnow()
     count = db.query(Invoice).count() + 1
-    inv_number = payload.get("invoice_number") or f"INV-{now.strftime('%Y%m')}-{count:03d}"
+    inv_number = invoice_in.invoice_number or f"INV-{now.strftime('%Y%m')}-{count:03d}"
     
-    items = payload.get("items", [])
-    items_json = json.dumps(items)
-    subtotal = sum(item.get("qty", 1) * item.get("price", 0) for item in items)
-    tax_pct = payload.get("tax_percent", 0)
+    # Serialize items
+    items_data = [item.dict() for item in invoice_in.items]
+    items_json = json.dumps(items_data)
+    
+    # Calculate totals
+    subtotal = sum(item.qty * item.price for item in invoice_in.items)
+    tax_pct = invoice_in.tax_percent
     total = subtotal + (subtotal * tax_pct / 100)
     
-    due_date = None
-    if payload.get("due_date"):
-        due_date = date.fromisoformat(payload["due_date"])
-    
     invoice = Invoice(
-        project_id=project_id,
+        project_id=invoice_in.project_id,
         invoice_number=inv_number,
         items=items_json,
         subtotal=subtotal,
         tax_percent=tax_pct,
         total=total,
         status="draft",
-        due_date=due_date,
-        notes=payload.get("notes", ""),
+        due_date=invoice_in.due_date,
+        notes=invoice_in.notes,
     )
     db.add(invoice)
     db.commit()
     db.refresh(invoice)
-    return {"id": invoice.id, "invoice_number": inv_number, "total": total, "status": "created"}
+    
+    return {
+        "id": invoice.id,
+        "project_id": invoice.project_id,
+        "project_name": project.name,
+        "client_name": project.lead.company if project.lead else "Unknown",
+        "invoice_number": invoice.invoice_number,
+        "items": items_data,
+        "subtotal": invoice.subtotal,
+        "tax_percent": invoice.tax_percent,
+        "total": invoice.total,
+        "status": invoice.status,
+        "due_date": invoice.due_date,
+        "paid_at": invoice.paid_at,
+        "notes": invoice.notes,
+        "created_at": invoice.created_at,
+        "updated_at": invoice.updated_at
+    }
 
-@app.put("/api/invoices/{inv_id}")
-async def update_invoice(inv_id: int, payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@app.put("/api/invoices/{inv_id}", response_model=schemas.InvoiceResponse)
+async def update_invoice(inv_id: int, invoice_in: schemas.InvoiceUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import Invoice
     from datetime import date, datetime
     import json
@@ -713,29 +917,66 @@ async def update_invoice(inv_id: int, payload: dict, db: Session = Depends(get_d
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
-    if "status" in payload:
-        inv.status = payload["status"]
-        if payload["status"] == "paid":
+    update_data = invoice_in.dict(exclude_unset=True)
+    
+    # Handled specifically for calculation logic
+    if "status" in update_data:
+        inv.status = update_data["status"]
+        if update_data["status"] == "paid":
             from models import get_wib_now
             inv.paid_at = get_wib_now()
             # Telegram notification for paid invoice
             from telegram_notifier import notify_invoice_paid, is_configured as tg_configured
             if tg_configured():
                 await notify_invoice_paid(inv.invoice_number, inv.total)
-    if "items" in payload:
-        inv.items = json.dumps(payload["items"])
-        inv.subtotal = sum(item.get("qty", 1) * item.get("price", 0) for item in payload["items"])
+                
+    if "items" in update_data:
+        items_list = update_data["items"] # List[InvoiceItem]
+        items_dicts = [item.dict() for item in items_list] if items_list else [] # convert to dicts
+        inv.items = json.dumps(items_dicts)
+        
+        # Recalculate subtotal
+        # items_list is list of Pydantic models (InvoiceItem)
+        if items_list:
+            inv.subtotal = sum(item.qty * item.price for item in items_list)
+        else:
+            inv.subtotal = 0
+            
         inv.total = inv.subtotal + (inv.subtotal * inv.tax_percent / 100)
-    if "tax_percent" in payload:
-        inv.tax_percent = payload["tax_percent"]
+        
+    if "tax_percent" in update_data:
+        inv.tax_percent = update_data["tax_percent"]
         inv.total = inv.subtotal + (inv.subtotal * inv.tax_percent / 100)
-    if "due_date" in payload:
-        inv.due_date = date.fromisoformat(payload["due_date"]) if payload["due_date"] else None
-    if "notes" in payload:
-        inv.notes = payload["notes"]
+        
+    if "due_date" in update_data:
+        inv.due_date = update_data["due_date"]
+        
+    if "notes" in update_data:
+        inv.notes = update_data["notes"]
     
     db.commit()
-    return {"id": inv.id, "status": "updated"}
+    db.refresh(inv)
+    
+    # Parse items back for response
+    parsed_items = json.loads(inv.items) if inv.items else []
+    
+    return {
+        "id": inv.id,
+        "project_id": inv.project_id,
+        "project_name": inv.project.name if inv.project else None,
+        "client_name": inv.project.lead.company if inv.project and inv.project.lead else None,
+        "invoice_number": inv.invoice_number,
+        "items": parsed_items,
+        "subtotal": inv.subtotal,
+        "tax_percent": inv.tax_percent,
+        "total": inv.total,
+        "status": inv.status,
+        "due_date": inv.due_date,
+        "paid_at": inv.paid_at,
+        "notes": inv.notes,
+        "created_at": inv.created_at,
+        "updated_at": inv.updated_at
+    }
 
 @app.delete("/api/invoices/{inv_id}")
 async def delete_invoice(inv_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

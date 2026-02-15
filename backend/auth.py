@@ -10,9 +10,7 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
-    # Fallback only for dev, or raise error
-    print("WARNING: SECRET_KEY not set in environment. Using unsafe default.")
-    SECRET_KEY = "unsafe_default_change_me_in_prod"
+    raise ValueError("No SECRET_KEY set for Flask application")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 300
 

@@ -1,31 +1,130 @@
 @import "tailwindcss";
 
-:root {
-  /* Deep Space Black */
-  --background: #000000;
-  --foreground: #f8fafc;
+@custom-variant dark (&:where(.dark, .dark *));
 
-  /* Neon Accents */
-  --neon-blue: #3b82f6;
-  --neon-cyan: #06b6d4;
-  --neon-emerald: #10b981;
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
 
-  /* Glass Surfaces */
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-surface: rgba(255, 255, 255, 0.03);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar-bg);
+  --color-sidebar-foreground: var(--sidebar-fg);
+  --color-sidebar-border: var(--sidebar-border);
+}
+
+@layer base {
+  :root {
+    /* Light Mode (Premium Professional) */
+    --background: #ffffff;
+    --foreground: #0f172a;
+
+    --card: #f8fafc;
+    --card-foreground: #0f172a;
+
+    --popover: #ffffff;
+    --popover-foreground: #0f172a;
+
+    --primary: #f59e0b;
+    /* Amber 500 */
+    --primary-foreground: #000000;
+
+    --secondary: #f1f5f9;
+    --secondary-foreground: #0f172a;
+
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+
+    --accent: #f1f5f9;
+    --accent-foreground: #0f172a;
+
+    --destructive: #ef4444;
+    --destructive-foreground: #f8fafc;
+
+    --border: #e2e8f0;
+    --input: #e2e8f0;
+    --ring: #f59e0b;
+
+    --glass-surface: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(0, 0, 0, 0.05);
+
+    /* Sidebar specific */
+    --sidebar-bg: #f8fafc;
+    --sidebar-fg: #0f172a;
+    --sidebar-border: #e2e8f0;
+  }
+
+  .dark {
+    /* Dark Mode (Deep Space Luxury) */
+    --background: #000000;
+    --foreground: #f8fafc;
+
+    --card: #0a0a0a;
+    --card-foreground: #f8fafc;
+
+    --popover: #000000;
+    --popover-foreground: #f8fafc;
+
+    --primary: #f59e0b;
+    --primary-foreground: #000000;
+
+    --secondary: #1e293b;
+    --secondary-foreground: #f8fafc;
+
+    --muted: #1e293b;
+    --muted-foreground: #94a3b8;
+
+    --accent: #1e293b;
+    --accent-foreground: #f8fafc;
+
+    --destructive: #7f1d1d;
+    --destructive-foreground: #f8fafc;
+
+    --border: #1e293b;
+    --input: #1e293b;
+    --ring: #f59e0b;
+
+    --glass-surface: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.08);
+
+    /* Sidebar specific */
+    --sidebar-bg: #000000;
+    --sidebar-fg: #f8fafc;
+    --sidebar-border: #1e293b;
+  }
 }
 
 body {
   background-color: var(--background);
-  background-image:
-    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25%),
-    radial-gradient(circle at 85% 30%, rgba(6, 182, 212, 0.08), transparent 25%);
   color: var(--foreground);
   font-family: 'Inter', sans-serif;
-  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Extreme Glassmorphism Utilities */
+/* Glassmorphism Utilities */
 .glass-panel {
   background: var(--glass-surface);
   backdrop-filter: blur(12px);
@@ -67,4 +166,6 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
-}@import 'react-big-calendar/lib/css/react-big-calendar.css';
+}
+
+@import 'react-big-calendar/lib/css/react-big-calendar.css';

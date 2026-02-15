@@ -1,14 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, momentLocalizer, View, ToolbarProps, EventProps } from 'react-big-calendar';
+import { Calendar, momentLocalizer, ToolbarProps, EventProps } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import {
     Plus, List, Calendar as CalendarIcon, CheckSquare, X,
     ChevronLeft, ChevronRight, Hash, Clock, Trash2, Edit
 } from 'lucide-react';
-import { api, FollowUp, Lead } from '@/lib/api';
+import useSWR from 'swr';
+import { api, fetcher, FollowUp, Lead } from '@/lib/api';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 const localizer = momentLocalizer(moment);
@@ -33,8 +34,8 @@ const CustomToolbar = (toolbar: ToolbarProps<CalendarEvent, object>) => {
     const label = () => {
         const date = moment(toolbar.date);
         return (
-            <span className="text-xl font-bold text-white capitalize">
-                {date.format('MMMM')} <span className="text-slate-500">{date.format('YYYY')}</span>
+            <span className="text-xl font-bold text-foreground capitalize">
+                {date.format('MMMM')} <span className="text-muted-foreground">{date.format('YYYY')}</span>
             </span>
         );
     };
@@ -43,35 +44,35 @@ const CustomToolbar = (toolbar: ToolbarProps<CalendarEvent, object>) => {
         <div className="flex items-center justify-between mb-6 p-1">
             <div className="flex items-center gap-4">
                 {label()}
-                <div className="flex bg-[#ffffff05] rounded-xl border border-[#ffffff08] p-1">
-                    <button onClick={goToBack} className="p-2 hover:bg-[#ffffff05] rounded-lg text-slate-400 hover:text-white transition-colors">
+                <div className="flex bg-accent/20 rounded-xl border border-border p-1">
+                    <button onClick={goToBack} className="p-2 hover:bg-accent/30 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                         <ChevronLeft className="w-5 h-5" />
                     </button>
-                    <button onClick={goToCurrent} className="px-4 py-2 text-xs font-bold text-slate-300 hover:text-white transition-colors">
+                    <button onClick={goToCurrent} className="px-4 py-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
                         Today
                     </button>
-                    <button onClick={goToNext} className="p-2 hover:bg-[#ffffff05] rounded-lg text-slate-400 hover:text-white transition-colors">
+                    <button onClick={goToNext} className="p-2 hover:bg-accent/30 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                         <ChevronRight className="w-5 h-5" />
                     </button>
                 </div>
             </div>
 
-            <div className="flex bg-[#ffffff05] rounded-xl border border-[#ffffff08] p-1">
+            <div className="flex bg-accent/20 rounded-xl border border-border p-1">
                 <button
                     onClick={() => toolbar.onView('month')}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${toolbar.view === 'month' ? 'bg-blue-500/20 text-blue-400' : 'text-slate-500 hover:text-white'}`}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${toolbar.view === 'month' ? 'bg-blue-500/20 text-blue-500' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                     Month
                 </button>
                 <button
                     onClick={() => toolbar.onView('week')}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${toolbar.view === 'week' ? 'bg-blue-500/20 text-blue-400' : 'text-slate-500 hover:text-white'}`}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${toolbar.view === 'week' ? 'bg-blue-500/20 text-blue-500' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                     Week
                 </button>
                 <button
                     onClick={() => toolbar.onView('day')}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${toolbar.view === 'day' ? 'bg-blue-500/20 text-blue-400' : 'text-slate-500 hover:text-white'}`}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${toolbar.view === 'day' ? 'bg-blue-500/20 text-blue-500' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                     Day
                 </button>
@@ -82,10 +83,10 @@ const CustomToolbar = (toolbar: ToolbarProps<CalendarEvent, object>) => {
 
 // ─── Custom Event ──────────────────────────────
 const CustomEvent = ({ event }: EventProps<CalendarEvent>) => {
-    let colorClass = 'bg-blue-500/20 border-blue-500/40 text-blue-300';
-    if (event.status === 'done') colorClass = 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 opacity-60 line-through';
-    else if (event.type === 'meeting') colorClass = 'bg-purple-500/20 border-purple-500/40 text-purple-300';
-    else if (event.type === 'call') colorClass = 'bg-amber-500/20 border-amber-500/40 text-amber-300';
+    let colorClass = 'bg-blue-500/20 border-blue-500/40 text-blue-500';
+    if (event.status === 'done') colorClass = 'bg-emerald-500/20 border-emerald-500/40 text-emerald-500 opacity-60 line-through';
+    else if (event.type === 'meeting') colorClass = 'bg-purple-500/20 border-purple-500/40 text-purple-500';
+    else if (event.type === 'call') colorClass = 'bg-amber-500/20 border-amber-500/40 text-amber-500';
 
     return (
         <div className={`h-full w-full px-2 py-1 rounded-md border text-xs font-medium truncate transition-all hover:scale-[1.02] ${colorClass}`}>
@@ -95,10 +96,31 @@ const CustomEvent = ({ event }: EventProps<CalendarEvent>) => {
 };
 
 export default function TasksPage() {
+    // SWR
+    const { data: tasksData, mutate: mutateTasks } = useSWR<FollowUp[]>(`${api.API_URL}/api/followups`, fetcher);
+    const { data: leadsData } = useSWR<Lead[]>(`${api.API_URL}/api/leads`, fetcher);
+
+    const leads = leadsData || [];
+    const loading = !tasksData;
+
+    // Map events
+    const events: CalendarEvent[] = (tasksData || []).map(t => {
+        const startDate = t.next_follow_date ? new Date(t.next_follow_date) : new Date(t.created_at || Date.now());
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1 hr default
+
+        return {
+            id: t.id,
+            title: `${t.lead_title}: ${t.note}`,
+            start: startDate,
+            end: endDate,
+            allDay: !t.next_follow_date,
+            status: t.status,
+            type: t.type,
+            resource: t
+        };
+    });
+
     const [view, setView] = useState<'calendar' | 'list'>('calendar');
-    const [events, setEvents] = useState<CalendarEvent[]>([]);
-    const [leads, setLeads] = useState<Lead[]>([]);
-    const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
 
@@ -108,32 +130,6 @@ export default function TasksPage() {
     const [taskNote, setTaskNote] = useState('');
     const [taskDate, setTaskDate] = useState('');
     const [taskType, setTaskType] = useState('wa');
-
-    useEffect(() => { loadData(); }, []);
-
-    const loadData = async () => {
-        try {
-            const [tasksData, leadsData] = await Promise.all([api.getFollowUps(), api.getLeads()]);
-            const mappedEvents = tasksData.map(t => {
-                const startDate = t.next_follow_date ? new Date(t.next_follow_date) : new Date(t.created_at || Date.now());
-                const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1 hr default
-
-                return {
-                    id: t.id,
-                    title: `${t.lead_title}: ${t.note}`,
-                    start: startDate,
-                    end: endDate,
-                    allDay: !t.next_follow_date,
-                    status: t.status,
-                    type: t.type,
-                    resource: t
-                };
-            });
-            setEvents(mappedEvents);
-            setLeads(leadsData);
-        } catch (error) { console.error("Failed to load tasks", error); }
-        finally { setLoading(false); }
-    };
 
     const handleSaveTask = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -157,7 +153,7 @@ export default function TasksPage() {
                 });
             }
             closeModal();
-            loadData();
+            mutateTasks();
         } catch (error) { alert('Failed to save task'); }
     };
 
@@ -171,7 +167,7 @@ export default function TasksPage() {
             await api.deleteFollowUp(editId);
             setShowConfirm(false);
             closeModal();
-            loadData();
+            mutateTasks();
         } catch (e) { alert('Failed to delete'); }
     };
 
@@ -204,36 +200,36 @@ export default function TasksPage() {
             <style jsx global>{`
                 .rbc-calendar { font-family: inherit; }
                 .rbc-month-view, .rbc-time-view, .rbc-agenda-view { border: none; }
-                .rbc-header { border-bottom: 1px solid #ffffff10; color: #94a3b8; font-weight: 600; padding: 12px 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
-                .rbc-day-bg { border-left: 1px solid #ffffff05; }
+                .rbc-header { border-bottom: 1px solid hsl(var(--border)); color: hsl(var(--muted-foreground)); font-weight: 600; padding: 12px 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+                .rbc-day-bg { border-left: 1px solid hsl(var(--border)); }
                 .rbc-off-range-bg { bg: transparent; opacity: 0.3; }
-                .rbc-today { background-color: #3b82f610; }
+                .rbc-today { background-color: hsl(var(--accent) / 0.1); }
                 .rbc-event { background: transparent; padding: 0; }
                 .rbc-row-segment { padding: 2px 4px; }
             `}</style>
 
             <div className="flex justify-between items-center mb-0">
                 <div>
-                    <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-                        <CheckSquare className="w-8 h-8 text-blue-400" />
+                    <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
+                        <CheckSquare className="w-8 h-8 text-blue-500" />
                         Tasks & Schedule
                     </h1>
-                    <p className="text-slate-400 mt-1">Manage your follow-ups and meetings</p>
+                    <p className="text-muted-foreground mt-1">Manage your follow-ups and meetings</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="flex bg-[#ffffff05] p-1 rounded-xl border border-[#ffffff08]">
-                        <button onClick={() => setView('calendar')} className={`p-2 rounded-lg transition-all ${view === 'calendar' ? 'bg-blue-500/20 text-blue-400' : 'text-slate-500 hover:text-white'}`}><CalendarIcon className="w-5 h-5" /></button>
-                        <button onClick={() => setView('list')} className={`p-2 rounded-lg transition-all ${view === 'list' ? 'bg-blue-500/20 text-blue-400' : 'text-slate-500 hover:text-white'}`}><List className="w-5 h-5" /></button>
+                    <div className="flex bg-accent/20 p-1 rounded-xl border border-border">
+                        <button onClick={() => setView('calendar')} className={`p-2 rounded-lg transition-all ${view === 'calendar' ? 'bg-blue-500/20 text-blue-500' : 'text-muted-foreground hover:text-foreground'}`}><CalendarIcon className="w-5 h-5" /></button>
+                        <button onClick={() => setView('list')} className={`p-2 rounded-lg transition-all ${view === 'list' ? 'bg-blue-500/20 text-blue-500' : 'text-muted-foreground hover:text-foreground'}`}><List className="w-5 h-5" /></button>
                     </div>
-                    <button onClick={openCreateModal} className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl transition-all font-medium border border-blue-400/20 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                    <button onClick={openCreateModal} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl transition-all font-medium border border-blue-400/20 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
                         <Plus className="w-4 h-4" /> New Task
                     </button>
                 </div>
             </div>
 
-            <div className="flex-1 glass-panel rounded-3xl p-6 overflow-hidden mt-6">
+            <div className="flex-1 glass-panel bg-card border border-border rounded-3xl p-6 overflow-hidden mt-6">
                 {loading ? (
-                    <div className="h-full flex items-center justify-center text-slate-500">Loading tasks...</div>
+                    <div className="h-full flex items-center justify-center text-muted-foreground">Loading tasks...</div>
                 ) : view === 'calendar' ? (
                     <Calendar
                         localizer={localizer}
@@ -249,27 +245,27 @@ export default function TasksPage() {
                     />
                 ) : (
                     <div className="space-y-4 overflow-y-auto h-full pr-2">
-                        {events.length === 0 && <p className="text-center text-slate-500 py-10">No tasks found.</p>}
+                        {events.length === 0 && <p className="text-center text-muted-foreground py-10">No tasks found.</p>}
                         {events.map(event => (
-                            <div key={event.id} className="bg-[#ffffff03] border border-[#ffffff05] p-4 rounded-xl flex justify-between items-center group hover:bg-[#ffffff05] transition-colors cursor-pointer" onClick={() => openEditModal(event)}>
+                            <div key={event.id} className="bg-accent/20 border border-border p-4 rounded-xl flex justify-between items-center group hover:bg-accent/30 transition-colors cursor-pointer" onClick={() => openEditModal(event)}>
                                 <div className="flex items-center gap-4">
                                     <input
                                         type="checkbox"
                                         checked={event.status === 'done'}
                                         onChange={(e) => {
                                             e.stopPropagation();
-                                            api.updateFollowUp(event.id, { status: event.status === 'done' ? 'pending' : 'done' }).then(loadData);
+                                            api.updateFollowUp(event.id, { status: event.status === 'done' ? 'pending' : 'done' }).then(() => mutateTasks());
                                         }}
-                                        className="w-5 h-5 rounded border-slate-600 bg-transparent text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                                        className="w-5 h-5 rounded border-muted-foreground bg-transparent text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
                                     />
                                     <div>
-                                        <h3 className={`font-medium transition-colors ${event.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-200 group-hover:text-blue-400'}`}>
+                                        <h3 className={`font-medium transition-colors ${event.status === 'done' ? 'text-muted-foreground line-through' : 'text-foreground group-hover:text-blue-500'}`}>
                                             {event.title}
                                         </h3>
-                                        <p className="text-sm text-slate-500">{moment(event.start).format('LLL')}</p>
+                                        <p className="text-sm text-muted-foreground">{moment(event.start).format('LLL')}</p>
                                     </div>
                                 </div>
-                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${event.status === 'done' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${event.status === 'done' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'}`}>
                                     {event.status === 'done' ? 'Done' : 'Pending'}
                                 </span>
                             </div>
@@ -281,17 +277,17 @@ export default function TasksPage() {
             {/* Modal */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={closeModal}>
-                    <div className="bg-[#0f1117] border border-[#ffffff10] rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden" onClick={e => e.stopPropagation()}>
                         <div className="p-6">
-                            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                                {editId ? <Edit className="w-5 h-5 text-blue-400" /> : <Plus className="w-5 h-5 text-blue-400" />}
+                            <h2 className="text-xl font-bold text-foreground mb-6 flex items-center gap-2">
+                                {editId ? <Edit className="w-5 h-5 text-blue-500" /> : <Plus className="w-5 h-5 text-blue-500" />}
                                 {editId ? 'Edit Task' : 'New Task'}
                             </h2>
                             <form onSubmit={handleSaveTask} className="space-y-5">
                                 <div>
-                                    <label className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-2 block">Related Lead</label>
+                                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Related Lead</label>
                                     <select
-                                        className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl py-3 px-4 text-slate-200 focus:outline-none focus:border-blue-500/40"
+                                        className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-blue-500/40"
                                         value={selectedLeadId}
                                         onChange={e => setSelectedLeadId(e.target.value)}
                                         required
@@ -299,15 +295,15 @@ export default function TasksPage() {
                                     >
                                         <option value="">-- Choose Lead --</option>
                                         {leads.map(l => (
-                                            <option key={l.id} value={l.id} className="bg-[#0f1117]">{l.title} ({l.company})</option>
+                                            <option key={l.id} value={l.id} className="bg-popover text-popover-foreground">{l.title} ({l.company})</option>
                                         ))}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-2 block">Task Description</label>
+                                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Task Description</label>
                                     <input
                                         type="text"
-                                        className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl py-3 px-4 text-slate-200 focus:outline-none focus:border-blue-500/40"
+                                        className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-blue-500/40"
                                         placeholder="e.g. Call for updates"
                                         value={taskNote}
                                         onChange={e => setTaskNote(e.target.value)}
@@ -316,36 +312,36 @@ export default function TasksPage() {
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-2 block">Due Date</label>
+                                        <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Due Date</label>
                                         <input
                                             type="date"
-                                            className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl py-3 px-4 text-slate-200 focus:outline-none focus:border-blue-500/40"
+                                            className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-blue-500/40"
                                             value={taskDate}
                                             onChange={e => setTaskDate(e.target.value)}
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-2 block">Type</label>
+                                        <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Type</label>
                                         <select
-                                            className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl py-3 px-4 text-slate-200 focus:outline-none focus:border-blue-500/40"
+                                            className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-blue-500/40"
                                             value={taskType}
                                             onChange={e => setTaskType(e.target.value)}
                                         >
-                                            <option value="wa" className="bg-[#0f1117]">WhatsApp</option>
-                                            <option value="call" className="bg-[#0f1117]">Call</option>
-                                            <option value="email" className="bg-[#0f1117]">Email</option>
-                                            <option value="meeting" className="bg-[#0f1117]">Meeting</option>
+                                            <option value="wa" className="bg-popover text-popover-foreground">WhatsApp</option>
+                                            <option value="call" className="bg-popover text-popover-foreground">Call</option>
+                                            <option value="email" className="bg-popover text-popover-foreground">Email</option>
+                                            <option value="meeting" className="bg-popover text-popover-foreground">Meeting</option>
                                         </select>
                                     </div>
                                 </div>
 
                                 <div className="flex gap-3 justify-end pt-2">
                                     {editId && (
-                                        <button type="button" onClick={handleDelete} className="px-5 py-2.5 rounded-xl border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all text-sm mr-auto flex items-center gap-2">
+                                        <button type="button" onClick={handleDelete} className="px-5 py-2.5 rounded-xl border border-red-500/20 text-red-500 hover:bg-red-500/10 transition-all text-sm mr-auto flex items-center gap-2">
                                             <Trash2 className="w-4 h-4" /> Delete
                                         </button>
                                     )}
-                                    <button type="button" onClick={closeModal} className="px-5 py-2.5 rounded-xl border border-[#ffffff10] text-slate-400 hover:text-white transition-all text-sm">Cancel</button>
+                                    <button type="button" onClick={closeModal} className="px-5 py-2.5 rounded-xl border border-border text-muted-foreground hover:text-foreground transition-all text-sm">Cancel</button>
                                     <button type="submit" className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all shadow-lg shadow-blue-500/20">
                                         {editId ? 'Save Changes' : 'Create Task'}
                                     </button>

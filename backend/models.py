@@ -18,16 +18,16 @@ class Lead(Base):
     title = Column(String, index=True)
     company = Column(String)
     location = Column(String, nullable=True)
-    email = Column(String, nullable=True)
+    email = Column(String, nullable=True, index=True)
     description = Column(Text, nullable=True)
-    url = Column(String, unique=True)
+    url = Column(String, unique=True, index=True)
     source = Column(String)  # e.g., "LinkedIn", "Upwork"
     match_score = Column(Float, nullable=True)
     match_reason = Column(Text, nullable=True)
     phone = Column(String, nullable=True)
     has_website = Column(Boolean, nullable=True)
-    status = Column(String, default="new")  # new, contacted, negotiation, won, lost
-    created_at = Column(DateTime, default=get_wib_now)
+    status = Column(String, default="new", index=True)  # new, contacted, negotiation, won, lost
+    created_at = Column(DateTime, default=get_wib_now, index=True)
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
 
     # Relationships
@@ -41,9 +41,9 @@ class FollowUp(Base):
     lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False, index=True)
     type = Column(String, default="wa")  # wa, call, email, meeting
     note = Column(Text, nullable=True)
-    status = Column(String, default="pending")  # pending, done, skipped
+    status = Column(String, default="pending", index=True)  # pending, done, skipped
     next_follow_date = Column(Date, nullable=True)
-    created_at = Column(DateTime, default=get_wib_now)
+    created_at = Column(DateTime, default=get_wib_now, index=True)
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
 
     lead = relationship("Lead", back_populates="follow_ups")
@@ -55,11 +55,11 @@ class Project(Base):
     lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    status = Column(String, default="negotiation")  # negotiation, active, completed, cancelled
+    status = Column(String, default="negotiation", index=True)  # negotiation, active, completed, cancelled
     budget = Column(Float, nullable=True)
     deadline = Column(Date, nullable=True)
     progress = Column(Integer, default=0)  # 0-100
-    created_at = Column(DateTime, default=get_wib_now)
+    created_at = Column(DateTime, default=get_wib_now, index=True)
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
 
     lead = relationship("Lead", back_populates="projects")
@@ -75,11 +75,11 @@ class Invoice(Base):
     subtotal = Column(Float, default=0)
     tax_percent = Column(Float, default=0)
     total = Column(Float, default=0)
-    status = Column(String, default="draft")  # draft, sent, paid, overdue
+    status = Column(String, default="draft", index=True)  # draft, sent, paid, overdue
     due_date = Column(Date, nullable=True)
     paid_at = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=get_wib_now)
+    created_at = Column(DateTime, default=get_wib_now, index=True)
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
 
     project = relationship("Project", back_populates="invoices")
@@ -104,9 +104,9 @@ class Campaign(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
-    status = Column(String, default="draft")  # draft, scheduled, running, completed
+    status = Column(String, default="draft", index=True)  # draft, scheduled, running, completed
     message_template = Column(Text, nullable=True)
     target_criteria = Column(Text, nullable=True)  # JSON string
     scheduled_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=get_wib_now)
+    created_at = Column(DateTime, default=get_wib_now, index=True)
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)

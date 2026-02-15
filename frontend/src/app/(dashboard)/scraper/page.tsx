@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import { api } from '@/lib/api';
 import {
-    Search, MapPin, Play, Loader2, Cpu, Globe, CheckSquare, Square, Zap,
-    ChevronDown, ChevronUp, Linkedin, Briefcase, ClipboardList, Palmtree,
-    MapPinned, Building2, School, ShoppingBag, Code2
+    Play, Square, Terminal, Settings, Shield, AlertTriangle,
+    Database, Globe, Search, Download, Trash2, Linkedin, ExternalLink, Briefcase, ClipboardList, Palmtree,
+    MapPinned, Building2, School, ShoppingBag, Code2, Cpu, Zap, ChevronUp, ChevronDown, MapPin, CheckSquare
 } from 'lucide-react';
 
 // ─── Source Configuration ────────────────────────────────
@@ -176,20 +176,20 @@ export default function ScraperPage() {
     return (
         <div className="w-full">
             <div className="mb-12">
-                <h1 className="text-4xl font-bold text-white tracking-tight flex items-center gap-3">
-                    <Cpu className="w-8 h-8 text-blue-400 fill-blue-400/20" />
+                <h1 className="text-4xl font-bold text-foreground tracking-tight flex items-center gap-3">
+                    <Cpu className="w-8 h-8 text-blue-500 fill-blue-500/20" />
                     Scraper Control
                 </h1>
-                <p className="text-slate-400 mt-2 text-lg">Multi-source lead extraction for jobs & local business.</p>
+                <p className="text-muted-foreground mt-2 text-lg">Multi-source lead extraction for jobs & local business.</p>
             </div>
 
             {/* ─── Keyword Presets ─── */}
             <div className="mb-8">
                 <button
                     onClick={() => setShowPresets(!showPresets)}
-                    className="flex items-center gap-2 text-sm font-mono text-slate-400 uppercase tracking-widest mb-4 hover:text-white transition-colors"
+                    className="flex items-center gap-2 text-sm font-mono text-muted-foreground uppercase tracking-widest mb-4 hover:text-foreground transition-colors"
                 >
-                    <Zap className="w-4 h-4 text-amber-400" />
+                    <Zap className="w-4 h-4 text-amber-500" />
                     Quick Presets
                     {showPresets ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
@@ -203,18 +203,18 @@ export default function ScraperPage() {
                                     key={preset.id}
                                     onClick={() => applyPreset(preset)}
                                     className={`text-left p-5 rounded-2xl border transition-all hover:scale-[1.02] bg-gradient-to-br ${preset.color} ${activePreset === preset.id
-                                        ? 'ring-2 ring-white/20 shadow-lg'
+                                        ? 'ring-2 ring-primary/20 shadow-lg'
                                         : 'hover:shadow-md'
                                         }`}
                                 >
-                                    <p className="text-white font-bold text-sm mb-1 flex items-center gap-2">
+                                    <p className="text-foreground font-bold text-sm mb-1 flex items-center gap-2">
                                         <PresetIcon className="w-4 h-4 opacity-80" />
                                         {preset.label}
                                     </p>
-                                    <p className="text-slate-400 text-xs leading-relaxed">{preset.desc}</p>
+                                    <p className="text-muted-foreground text-xs leading-relaxed">{preset.desc}</p>
                                     <div className="flex flex-wrap gap-1 mt-3">
                                         {preset.variants.slice(0, 3).map((v) => (
-                                            <span key={v} className="text-[9px] px-2 py-0.5 rounded-full bg-black/30 text-slate-300 font-mono">
+                                            <span key={v} className="text-[9px] px-2 py-0.5 rounded-full bg-black/10 dark:bg-black/30 text-muted-foreground dark:text-slate-300 font-mono">
                                                 {v}
                                             </span>
                                         ))}
@@ -227,22 +227,22 @@ export default function ScraperPage() {
             </div>
 
             {/* ─── Main Form ─── */}
-            <div className="glass-panel rounded-3xl p-8 md:p-12 relative overflow-hidden">
+            <div className="glass-panel bg-card border border-border rounded-3xl p-8 md:p-12 relative overflow-hidden">
                 <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-500/20 blur-3xl rounded-full pointer-events-none" />
                 <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-cyan-500/10 blur-3xl rounded-full pointer-events-none" />
 
                 <form onSubmit={handleScrape} className="space-y-8 relative z-10">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-3">
-                            <label className="text-xs font-mono text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Search className="w-3 h-3 text-blue-400" /> Target Keywords
+                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
+                                <Search className="w-3 h-3 text-blue-500" /> Target Keywords
                             </label>
                             <div className="relative group">
                                 <input
                                     type="text"
                                     value={keywords}
                                     onChange={(e) => { setKeywords(e.target.value); setActivePreset(null); }}
-                                    className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl py-4 px-6 text-white focus:outline-none focus:border-blue-500/50 focus:bg-[#000000]/60 transition-all placeholder:text-slate-700 text-lg shadow-inner"
+                                    className="w-full bg-input border border-border rounded-xl py-4 px-6 text-foreground focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-muted-foreground text-lg shadow-inner"
                                     placeholder="e.g. Pesantren, Fullstack Developer"
                                     required
                                 />
@@ -257,8 +257,8 @@ export default function ScraperPage() {
                                             type="button"
                                             onClick={() => setKeywords(v)}
                                             className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${keywords === v
-                                                ? 'bg-blue-500/20 border-blue-500/40 text-blue-300'
-                                                : 'bg-[#ffffff03] border-[#ffffff08] text-slate-500 hover:text-white hover:border-[#ffffff15]'
+                                                ? 'bg-blue-500/20 border-blue-500/40 text-blue-500'
+                                                : 'bg-accent/50 border-border text-muted-foreground hover:text-foreground hover:border-foreground/20'
                                                 }`}
                                         >
                                             {v}
@@ -269,15 +269,15 @@ export default function ScraperPage() {
                         </div>
 
                         <div className="space-y-3">
-                            <label className="text-xs font-mono text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <MapPin className="w-3 h-3 text-cyan-400" /> Geographic Zone
+                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
+                                <MapPin className="w-3 h-3 text-cyan-500" /> Geographic Zone
                             </label>
                             <div className="relative group">
                                 <input
                                     type="text"
                                     value={location}
                                     onChange={(e) => setLocation(e.target.value)}
-                                    className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl py-4 px-6 text-white focus:outline-none focus:border-cyan-500/50 focus:bg-[#000000]/60 transition-all placeholder:text-slate-700 text-lg shadow-inner"
+                                    className="w-full bg-input border border-border rounded-xl py-4 px-6 text-foreground focus:outline-none focus:border-cyan-500/50 transition-all placeholder:text-muted-foreground text-lg shadow-inner"
                                     placeholder="e.g. Jawa Timur, Remote, Jakarta"
                                 />
                                 <div className="absolute bottom-0 left-0 h-[2px] w-0 bg-gradient-to-r from-cyan-500 to-emerald-500 transition-all duration-500 group-focus-within:w-full rounded-b-xl" />
@@ -288,8 +288,8 @@ export default function ScraperPage() {
                     {/* ─── Safety & Limit Controls ─── */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-3">
-                            <label className="text-xs font-mono text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Zap className="w-3 h-3 text-amber-400" /> Max Leads per Source
+                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
+                                <Zap className="w-3 h-3 text-amber-500" /> Max Leads per Source
                             </label>
                             <div className="relative group">
                                 <input
@@ -298,44 +298,44 @@ export default function ScraperPage() {
                                     max="50"
                                     value={limit}
                                     onChange={(e) => setLimit(parseInt(e.target.value))}
-                                    className="w-full bg-[#000000]/40 border border-[#ffffff10] rounded-xl py-4 px-6 text-white focus:outline-none focus:border-amber-500/50 focus:bg-[#000000]/60 transition-all placeholder:text-slate-700 text-lg shadow-inner font-mono"
+                                    className="w-full bg-input border border-border rounded-xl py-4 px-6 text-foreground focus:outline-none focus:border-amber-500/50 transition-all placeholder:text-muted-foreground text-lg shadow-inner font-mono"
                                     placeholder="10"
                                 />
                                 <div className="absolute bottom-0 left-0 h-[2px] w-0 bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500 group-focus-within:w-full rounded-b-xl" />
                             </div>
-                            <p className="text-[10px] text-slate-500 ml-1">Limit scraping to avoid detection (Recommended: 5-10)</p>
+                            <p className="text-[10px] text-muted-foreground ml-1">Limit scraping to avoid detection (Recommended: 5-10)</p>
                         </div>
 
                         <div className="space-y-3">
-                            <label className="text-xs font-mono text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <CheckSquare className="w-3 h-3 text-emerald-400" /> Safe Mode
+                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
+                                <CheckSquare className="w-3 h-3 text-emerald-500" /> Safe Mode
                             </label>
                             <div
                                 onClick={() => setSafeMode(!safeMode)}
                                 className={`
                                     w-full h-[62px] rounded-xl border cursor-pointer transition-all px-4 flex items-center justify-between
                                     ${safeMode
-                                        ? 'bg-emerald-500/10 border-emerald-500/50 text-white shadow-[0_0_15px_rgba(16,185,129,0.2)]'
-                                        : 'bg-[#000000]/40 border-[#ffffff10] text-slate-500 hover:border-[#ffffff20]'
+                                        ? 'bg-emerald-500/10 border-emerald-500/50 text-foreground shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                                        : 'bg-input border-border text-muted-foreground hover:border-foreground/20'
                                     }
                                 `}
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-6 rounded-full relative transition-colors ${safeMode ? 'bg-emerald-500' : 'bg-slate-700'}`}>
-                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${safeMode ? 'translate-x-4' : 'translate-x-0'}`} />
+                                    <div className={`w-10 h-6 rounded-full relative transition-colors ${safeMode ? 'bg-emerald-500' : 'bg-muted-foreground'}`}>
+                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-background transition-transform ${safeMode ? 'translate-x-4' : 'translate-x-0'}`} />
                                     </div>
                                     <span className="font-semibold text-sm">Human Behavior Mode</span>
                                 </div>
-                                {safeMode && <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded">ACTIVE</span>}
+                                {safeMode && <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded">ACTIVE</span>}
                             </div>
-                            <p className="text-[10px] text-slate-500 ml-1">Adds random delays to mimic human interaction (Slower but safer)</p>
+                            <p className="text-[10px] text-muted-foreground ml-1">Adds random delays to mimic human interaction (Slower but safer)</p>
                         </div>
                     </div>
 
                     {/* Source Selection */}
                     <div className="space-y-3">
-                        <label className="text-xs font-mono text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                            <Globe className="w-3 h-3 text-emerald-400" /> Data Sources
+                        <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
+                            <Globe className="w-3 h-3 text-emerald-500" /> Data Sources
                         </label>
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                             {ALL_SOURCES.map((src) => {
@@ -348,7 +348,7 @@ export default function ScraperPage() {
                                         onClick={() => toggleSource(src.id)}
                                         className={`flex flex-col items-start gap-1 px-4 py-3 rounded-xl border transition-all text-sm font-medium ${isActive
                                             ? src.color + ' shadow-lg'
-                                            : 'bg-[#ffffff03] border-[#ffffff08] text-slate-600 hover:text-slate-300 hover:border-[#ffffff15]'
+                                            : 'bg-accent/20 border-border text-muted-foreground hover:text-foreground hover:border-foreground/20'
                                             }`}
                                     >
                                         <div className="flex items-center gap-2 w-full">
@@ -366,7 +366,7 @@ export default function ScraperPage() {
                     {/* Removed extra closing div */}
 
                     <div className="pt-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div className="text-slate-600 text-sm font-mono space-y-1">
+                        <div className="text-muted-foreground text-sm font-mono space-y-1">
                             {selectedSources.includes('gmaps') && (
                                 <p className="text-red-400/70 text-xs flex items-center gap-1">
                                     <MapPinned className="w-3 h-3" /> Google Maps mode: scrapes local businesses
@@ -378,7 +378,7 @@ export default function ScraperPage() {
                             <button
                                 type="button"
                                 onClick={handleStop}
-                                className="px-8 py-4 rounded-xl font-bold flex items-center gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all font-mono tracking-widest text-sm"
+                                className="px-8 py-4 rounded-xl font-bold flex items-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 transition-all font-mono tracking-widest text-sm"
                             >
                                 <span className="relative flex h-3 w-3">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -393,7 +393,7 @@ export default function ScraperPage() {
                                 className={`
                     relative overflow-hidden group px-10 py-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all
                     ${selectedSources.length === 0
-                                        ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700'
+                                        ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
                                         : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)] border border-blue-400/20'
                                     }
                   `}
@@ -407,14 +407,14 @@ export default function ScraperPage() {
                 </form>
 
                 {/* ─── Live Log Terminal ─── */}
-                <div className="mt-10 bg-[#0c0c0c] border border-[#ffffff10] rounded-2xl overflow-hidden shadow-2xl relative">
-                    <div className="flex items-center justify-between px-4 py-2 bg-[#1a1a1a] border-b border-[#ffffff10]">
+                <div className="mt-10 bg-card border border-border rounded-2xl overflow-hidden shadow-2xl relative">
+                    <div className="flex items-center justify-between px-4 py-2 bg-muted/20 border-b border-border">
                         <div className="flex gap-2">
                             <div className="w-3 h-3 rounded-full bg-red-500/50" />
                             <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
                             <div className="w-3 h-3 rounded-full bg-green-500/50" />
                         </div>
-                        <span className="text-xs font-mono text-slate-500">velora-scraper-console</span>
+                        <span className="text-xs font-mono text-muted-foreground">velora-scraper-console</span>
                     </div>
 
                     <div
@@ -422,19 +422,19 @@ export default function ScraperPage() {
                         className="p-6 h-[300px] overflow-y-auto font-mono text-xs md:text-sm space-y-1 relative"
                     >
                         {logs.length === 0 && !loading && (
-                            <div className="absolute inset-0 flex items-center justify-center text-slate-700 pointer-events-none">
+                            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none">
                                 <span className="opacity-50">Waiting for scrape command...</span>
                             </div>
                         )}
 
                         {logs.map((log, i) => (
                             <div key={i} className="text-slate-300 border-l-2 border-transparent pl-2 hover:border-slate-700 hover:bg-white/5 transition-colors">
-                                <span className="text-slate-600 mr-2">{log.substring(0, 10)}</span>
+                                <span className="text-slate-500 mr-2">{log.substring(0, 10)}</span>
                                 <span className={
                                     log.includes("ERROR") || log.includes("❌") ? "text-red-400" :
                                         log.includes("SUCCESS") || log.includes("🎉") ? "text-emerald-400" :
                                             log.includes("Starting") || log.includes("🚀") ? "text-blue-400" :
-                                                "text-slate-300"
+                                                "text-primary"
                                 }>
                                     {log.substring(11)}
                                 </span>

@@ -104,6 +104,8 @@ async function authFetch(url: string, opts: RequestInit = {}) {
     return res.json();
 }
 
+export const fetcher = (url: string) => authFetch(url);
+
 export const api = {
     API_URL,
     // ─── Leads ───
@@ -259,6 +261,19 @@ export const api = {
 
     async deleteCampaign(id: number) {
         return authFetch(`${API_URL}/api/campaigns/${id}`, { method: 'DELETE' });
+    },
+
+    // ─── Campaign Runner ───
+    async launchCampaign(id: number) {
+        return authFetch(`${API_URL}/api/campaigns/${id}/launch`, { method: 'POST' });
+    },
+
+    async getCampaignStatus() {
+        return authFetch(`${API_URL}/api/campaigns/status`);
+    },
+
+    async stopCampaign() {
+        return authFetch(`${API_URL}/api/campaigns/stop`, { method: 'POST' });
     },
 
 
