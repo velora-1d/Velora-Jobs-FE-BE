@@ -112,7 +112,7 @@ export default function LoginPage() {
                 {/* Theme Toggle */}
                 <button
                     onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-                    className="absolute top-8 right-8 p-3 rounded-full bg-slate-200/50 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-white/70 hover:bg-slate-300 dark:hover:bg-white/10 transition-all"
+                    className="fixed top-6 right-6 z-50 p-3 rounded-full bg-slate-200/50 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-white/70 hover:bg-slate-300 dark:hover:bg-white/10 hover:scale-110 transition-all shadow-lg backdrop-blur-sm"
                 >
                     {/* Use mounted check to avoid hydration mismatch on icon */}
                     {mounted ? (
