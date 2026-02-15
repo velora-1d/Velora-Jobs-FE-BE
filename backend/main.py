@@ -7,7 +7,7 @@ from datetime import timedelta
 import asyncio
 import os
 from auth import verify_password, get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
-from models import User, Lead, Setting
+from models import User, Lead, Setting, Prospect
 import schemas
 from typing import List
 
@@ -189,11 +189,11 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
     global SCRAPER_RUNNING
     from scraper import JobScraper
     from ai_scorer import score_lead
-    # from campaign_runner import campaign_runner # Avoid circular import if needed
     import asyncio
     from database import SessionLocal
 
-    log_message(f"🚀 Starting background scrape for '{keywords}'")
+    is_gmaps = 'gmaps' in sources
+    log_message(f"🚀 Starting background scrape for '{keywords}' ({'Prospects' if is_gmaps else 'Jobs'} mode)")
     
     scraper = JobScraper(
         headless=True,
@@ -208,58 +208,113 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
     try:
         results = await scraper.scrape_all(keywords, location, sources, limit=limit)
         
-        saved_count = 0
+        saved_leads = 0
+        saved_prospects = 0
+        
         for item in results:
             if interrupt_event.is_set(): 
                 log_message("🛑 Loop interrupted, stopping save...")
                 break
             
-            # Check for duplicates using the local session
-            existing = db.query(Lead).filter(Lead.url == item['url']).first()
-            if not existing:
-                log_message(f"✨ New lead found: {item['title']} @ {item['company']}")
-                # Score with AI
-                try:
-                    ai_result = await score_lead(
+            source = item.get('source', '')
+            
+            # ── Google Maps → save to PROSPECTS table ──
+            if source == 'Google Maps':
+                maps_url = item.get('maps_url', '')
+                if maps_url:
+                    existing = db.query(Prospect).filter(Prospect.maps_url == maps_url).first()
+                else:
+                    existing = None
+                
+                if not existing:
+                    log_message(f"✨ New prospect: {item['name']} | Phone: {item.get('phone', '-')}")
+                    # Score with AI
+                    try:
+                        ai_result = await score_lead(
+                            title=item['name'],
+                            company=item.get('category', 'Local Business'),
+                            description=f"Category: {item.get('category', '')} | Address: {item.get('address', '')}",
+                            has_website=item.get('has_website', False),
+                            category=item.get('category', '')
+                        )
+                    except Exception as ai_e:
+                        log_message(f"⚠️ AI Scorer error: {str(ai_e)}")
+                        ai_result = {"score": 0, "reason": "AI scoring failed"}
+                    
+                    new_prospect = Prospect(
+                        name=item['name'],
+                        category=item.get('category', 'Local Business'),
+                        address=item.get('address', ''),
+                        phone=item.get('phone', ''),
+                        email=item.get('email', ''),
+                        website=item.get('website', ''),
+                        has_website=item.get('has_website', False),
+                        rating=item.get('rating'),
+                        review_count=item.get('review_count'),
+                        maps_url=maps_url,
+                        match_score=ai_result['score'],
+                        match_reason=ai_result['reason'],
+                        source_keyword=item.get('source_keyword', keywords),
+                        status="new",
+                    )
+                    db.add(new_prospect)
+                    saved_prospects += 1
+                else:
+                    log_message(f"⏭️ Duplicate prospect (skip): {item['name']}")
+            
+            # ── Other sources → save to LEADS table (as before) ──
+            else:
+                existing = db.query(Lead).filter(Lead.url == item['url']).first()
+                if not existing:
+                    log_message(f"✨ New lead found: {item['title']} @ {item['company']}")
+                    try:
+                        ai_result = await score_lead(
+                            title=item['title'],
+                            company=item['company'],
+                            description=item.get('description', ''),
+                            has_website=item.get('has_website', True),
+                            category=item.get('company', '')
+                        )
+                    except Exception as ai_e:
+                        log_message(f"⚠️ AI Scorer error: {str(ai_e)}")
+                        ai_result = {"score": 0, "reason": "AI scoring failed"}
+                    
+                    new_lead = Lead(
                         title=item['title'],
                         company=item['company'],
+                        location=item['location'],
                         description=item.get('description', ''),
-                        has_website=item.get('has_website', True),
-                        category=item.get('company', '') # In GMaps, company field often holds the category
+                        url=item['url'],
+                        source=item['source'],
+                        match_score=ai_result['score'],
+                        match_reason=ai_result['reason'],
+                        phone=item.get('phone', ''),
+                        has_website=item.get('has_website'),
+                        status="new",
                     )
-                except Exception as ai_e:
-                    log_message(f"⚠️ AI Scorer error: {str(ai_e)}")
-                    ai_result = {"score": 0, "reason": "AI scoring failed"}
-                
-                new_lead = Lead(
-                    title=item['title'],
-                    company=item['company'],
-                    location=item['location'],
-                    description=item.get('description', ''),
-                    url=item['url'],
-                    source=item['source'],
-                    match_score=ai_result['score'],
-                    match_reason=ai_result['reason'],
-                    phone=item.get('phone', ''),
-                    has_website=item.get('has_website'),
-                    status="new",
-                )
-                db.add(new_lead)
-                saved_count += 1
+                    db.add(new_lead)
+                    saved_leads += 1
         
         db.commit()
-        log_message(f"🎉 Scraping finished! Saved {saved_count} new leads.")
+        
+        total = saved_leads + saved_prospects
+        if saved_prospects > 0:
+            log_message(f"🎉 Scraping finished! Saved {saved_prospects} new prospects.")
+        if saved_leads > 0:
+            log_message(f"🎉 Scraping finished! Saved {saved_leads} new leads.")
+        if total == 0:
+            log_message(f"📭 Scraping finished. No new data found (all duplicates).")
 
         # Telegram notification
-        if saved_count > 0:
+        if total > 0:
             from telegram_notifier import notify_new_leads, is_configured
             if is_configured():
-                await notify_new_leads(saved_count, ", ".join(sources))
+                await notify_new_leads(total, ", ".join(sources))
                 
     except Exception as e:
         log_message(f"❌ Error during scraping: {str(e)}")
         import traceback
-        print(traceback.format_exc()) # Still logged to Docker stdout
+        print(traceback.format_exc())
     finally:
         db.close()
         SCRAPER_RUNNING = False
@@ -404,6 +459,94 @@ async def delete_lead(lead_id: int, db: Session = Depends(get_db), current_user:
     db.query(Project).filter(Project.lead_id == lead_id).delete()
     
     db.delete(lead)
+    db.commit()
+    return {"status": "deleted"}
+
+# ---------------------------------------------------------------------
+# PROSPECT CRUD (Google Maps Business Prospects)
+# ---------------------------------------------------------------------
+
+@app.get("/api/prospects", response_model=List[schemas.ProspectResponse])
+async def get_prospects(
+    start_date: str = None,
+    end_date: str = None, 
+    category: str = None,
+    status: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from datetime import datetime
+    query = db.query(Prospect)
+    
+    if start_date:
+        query = query.filter(Prospect.created_at >= datetime.fromisoformat(start_date))
+    if end_date:
+        query = query.filter(Prospect.created_at <= datetime.fromisoformat(end_date + "T23:59:59"))
+    if category and category != "all":
+        query = query.filter(Prospect.category.ilike(f"%{category}%"))
+    if status and status != "all":
+        query = query.filter(Prospect.status == status)
+    
+    return query.order_by(Prospect.created_at.desc()).all()
+
+@app.get("/api/prospects/stats")
+async def get_prospect_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from sqlalchemy import func
+    total = db.query(func.count(Prospect.id)).scalar() or 0
+    contacted = db.query(func.count(Prospect.id)).filter(Prospect.status == "contacted").scalar() or 0
+    won = db.query(func.count(Prospect.id)).filter(Prospect.status == "won").scalar() or 0
+    no_web = db.query(func.count(Prospect.id)).filter(Prospect.has_website == False).scalar() or 0
+    return {
+        "total": total,
+        "contacted": contacted,
+        "won": won,
+        "without_website": no_web,
+    }
+
+@app.post("/api/prospects", response_model=schemas.ProspectResponse)
+async def create_prospect(data: schemas.ProspectCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    prospect = Prospect(
+        name=data.name,
+        category=data.category,
+        address=data.address,
+        phone=data.phone,
+        email=data.email,
+        website=data.website,
+        has_website=data.has_website,
+        rating=data.rating,
+        review_count=data.review_count,
+        maps_url=data.maps_url,
+        match_score=data.match_score,
+        match_reason=data.match_reason,
+        status=data.status,
+        source_keyword=data.source_keyword,
+    )
+    db.add(prospect)
+    db.commit()
+    db.refresh(prospect)
+    return prospect
+
+@app.put("/api/prospects/{prospect_id}", response_model=schemas.ProspectResponse)
+async def update_prospect(prospect_id: int, data: schemas.ProspectUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    prospect = db.query(Prospect).filter(Prospect.id == prospect_id).first()
+    if not prospect:
+        raise HTTPException(status_code=404, detail="Prospect not found")
+    
+    update_data = data.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(prospect, key, value)
+    
+    db.commit()
+    db.refresh(prospect)
+    return prospect
+
+@app.delete("/api/prospects/{prospect_id}")
+async def delete_prospect(prospect_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    prospect = db.query(Prospect).filter(Prospect.id == prospect_id).first()
+    if not prospect:
+        raise HTTPException(status_code=404, detail="Prospect not found")
+    
+    db.delete(prospect)
     db.commit()
     return {"status": "deleted"}
 

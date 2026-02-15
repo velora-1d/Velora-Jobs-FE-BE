@@ -337,19 +337,17 @@ class JobScraper:
 
 
     # ──────────────────────────────────────────────
-    # 5. GOOGLE MAPS (Local Business Prospecting)
-    # ──────────────────────────────────────────────
-
-    # ──────────────────────────────────────────────
-    # 5. GOOGLE MAPS (Local Business Prospecting)
+    # 5. GOOGLE MAPS (Local Business Prospecting — Deep Scraping)
     # ──────────────────────────────────────────────
 
     async def scrape_gmaps(self, keywords: str, location: str, limit: int = 10):
         """
-        Scrape Google Maps for local businesses.
-        Great for finding UMKM, Sekolah, Pesantren that need digital services.
+        Deep-scrape Google Maps for local businesses.
+        Clicks into EACH listing to extract full contact info (phone, email, website).
+        ONLY returns prospects that have a phone number (WA filter).
+        Returns data shaped for the `prospects` table.
         """
-        leads = []
+        prospects = []
         async with async_playwright() as p:
             browser = await self._launch_browser(p)
             context = await browser.new_context(user_agent=STEALTH_UA, viewport=VIEWPORT)
@@ -357,10 +355,9 @@ class JobScraper:
 
             query = f"{keywords} {location}"
             url = f"https://www.google.com/maps/search/{quote(query)}"
-            print(f"[GMAPS] {url}")
 
             try:
-                self._log(f"[GMAPS] Searching: '{query}'...")
+                self._log(f"[GMAPS] 🔍 Deep searching: '{query}'...")
                 await page.goto(url, timeout=60000)
 
                 # Wait for results panel
@@ -371,10 +368,11 @@ class JobScraper:
                     self._log(f"[GMAPS] Waiting for results to appear...")
                     await asyncio.sleep(5)
 
-                # Scroll the results panel to load more
+                # Scroll the results panel to load more listings
                 feed = await page.query_selector("div[role='feed']")
                 if feed:
-                    for i in range(5):
+                    scroll_rounds = max(5, limit // 3)  # Scale scrolling to requested limit
+                    for i in range(scroll_rounds):
                         self._check_interrupt()
                         await feed.evaluate("el => el.scrollBy(0, 800)")
                         await asyncio.sleep(random.uniform(1.0, 2.0))
@@ -384,81 +382,190 @@ class JobScraper:
                 if not cards:
                     cards = await page.query_selector_all("a[href*='/maps/place/']")
 
-                self._log(f"[GMAPS] Found {len(cards)} listings.")
+                total_cards = len(cards)
+                target = min(total_cards, limit)
+                self._log(f"[GMAPS] Found {total_cards} listings. Will deep-inspect {target}.")
 
-                for card in cards[:limit]:
+                skipped_no_phone = 0
+
+                for idx, card in enumerate(cards[:target]):
                     self._check_interrupt()
                     try:
-                        # Try to get name
+                        # --- Step 1: Get name from card ---
                         name_el = await card.query_selector(".qBF1Pd, .fontHeadlineSmall")
                         if not name_el:
                             name_el = await card.query_selector("span.OSrXXb")
+                        if not name_el:
+                            continue
 
-                        if name_el:
-                            name = (await name_el.inner_text()).strip()
-                            self._log(f"[GMAPS] -> Inspecting: {name}")
+                        name = (await name_el.inner_text()).strip()
+                        self._log(f"[GMAPS] [{idx+1}/{target}] 🔎 Inspecting: {name}")
 
-                            # Rating / review count (indicates established business)
-                            rating_el = await card.query_selector(".MW4etd")
-                            review_el = await card.query_selector(".UY7F9")
+                        # --- Step 2: Click the card to open detail panel ---
+                        link_el = await card.query_selector("a.hfpxzc")
+                        if link_el:
+                            await link_el.click()
+                        else:
+                            await card.click()
 
-                            # Address
-                            addr_el = await card.query_selector(".W4Efsd:last-child .W4Efsd span:nth-child(2), .W4Efsd")
+                        # Wait for detail panel to load
+                        await asyncio.sleep(random.uniform(2.0, 3.5))
 
-                            # Category (e.g., "Pesantren", "Sekolah Dasar")
-                            cat_el = await card.query_selector(".W4Efsd:first-child .W4Efsd span:nth-child(2)")
+                        # --- Step 3: Extract data from detail panel ---
+                        phone = ""
+                        email = ""
+                        website = ""
+                        address = ""
+                        category = ""
+                        rating = None
+                        review_count = None
+                        maps_url = page.url  # Current URL is the place URL
 
-                            # Phone
-                            phone_el = await card.query_selector("span.UsdlK")
+                        # Phone — look for phone button/link in the detail panel
+                        phone_buttons = await page.query_selector_all("button[data-tooltip*='phone'], button[data-item-id*='phone'], a[data-item-id*='phone']")
+                        if phone_buttons:
+                            for pb in phone_buttons:
+                                aria = await pb.get_attribute("aria-label") or ""
+                                if aria:
+                                    # Extract digits from aria-label like "Phone: 0812-3456-7890"
+                                    phone_match = aria.replace("Phone:", "").replace("Telepon:", "").strip()
+                                    if phone_match:
+                                        phone = phone_match
+                                        break
+                        
+                        # Fallback: look for phone in text elements
+                        if not phone:
+                            all_buttons = await page.query_selector_all("button[data-item-id]")
+                            for btn in all_buttons:
+                                item_id = await btn.get_attribute("data-item-id") or ""
+                                if "phone" in item_id.lower():
+                                    aria = await btn.get_attribute("aria-label") or ""
+                                    phone = aria.replace("Phone:", "").replace("Telepon:", "").strip()
+                                    break
 
-                            # Website link
-                            website_el = await card.query_selector("a[data-value='Website'], a[href*='http']:not([href*='google'])")
+                        # ⭐ FILTER: Skip if no phone
+                        if not phone:
+                            self._log(f"[GMAPS]    ❌ No phone → SKIP")
+                            skipped_no_phone += 1
+                            # Go back to results list
+                            back_btn = await page.query_selector("button[aria-label='Back'], button[jsaction*='back']")
+                            if back_btn:
+                                await back_btn.click()
+                            else:
+                                await page.go_back()
+                            await asyncio.sleep(random.uniform(1.0, 2.0))
+                            continue
 
-                            # Get the Maps link
-                            link_el = await card.query_selector("a.hfpxzc")
+                        # Website
+                        website_buttons = await page.query_selector_all("a[data-item-id*='authority'], a[data-item-id*='website']")
+                        if website_buttons:
+                            for wb in website_buttons:
+                                href = await wb.get_attribute("href") or ""
+                                if href and "google" not in href:
+                                    website = href
+                                    break
 
-                            rating = (await rating_el.inner_text()).strip() if rating_el else ""
-                            reviews = (await review_el.inner_text()).strip() if review_el else ""
-                            address = (await addr_el.inner_text()).strip() if addr_el else location
-                            category = (await cat_el.inner_text()).strip() if cat_el else ""
-                            phone = (await phone_el.inner_text()).strip() if phone_el else ""
-                            has_website = website_el is not None
-                            maps_url = await link_el.get_attribute("href") if link_el else ""
+                        # Address
+                        addr_buttons = await page.query_selector_all("button[data-item-id*='address'], button[data-item-id='oloc']")
+                        if addr_buttons:
+                            for ab in addr_buttons:
+                                aria = await ab.get_attribute("aria-label") or ""
+                                address = aria.replace("Address:", "").replace("Alamat:", "").strip()
+                                if address:
+                                    break
+                        
+                        if not address:
+                            address = location
 
-                            # Build description with business info
-                            desc_parts = []
-                            if category:
-                                desc_parts.append(f"Kategori: {category}")
-                            if rating:
-                                desc_parts.append(f"Rating: {rating}")
-                            if reviews:
-                                desc_parts.append(f"Ulasan: {reviews}")
-                            if phone:
-                                desc_parts.append(f"Telp: {phone}")
-                            desc_parts.append(f"Website: {'Ada' if has_website else 'BELUM ADA ⭐'}")
+                        # Category
+                        cat_el = await page.query_selector("button[jsaction*='category'] span, .DkEaL")
+                        if cat_el:
+                            category = (await cat_el.inner_text()).strip()
+                        
+                        if not category:
+                            # Try from the header area
+                            cat_buttons = await page.query_selector_all("button.DkEaL")
+                            if cat_buttons:
+                                category = (await cat_buttons[0].inner_text()).strip()
 
-                            leads.append({
-                                "title": name,
-                                "company": category or "Local Business",
-                                "location": address,
-                                "url": maps_url or "",
-                                "source": "Google Maps",
-                                "description": " | ".join(desc_parts),
-                                "has_website": has_website,
-                                "phone": phone,
-                            })
-                    except Exception:
+                        # Rating
+                        rating_el = await page.query_selector("div.F7nice span[aria-hidden='true']")
+                        if rating_el:
+                            try:
+                                rating = float((await rating_el.inner_text()).strip().replace(",", "."))
+                            except (ValueError, TypeError):
+                                pass
+
+                        # Review count
+                        review_el = await page.query_selector("div.F7nice span[aria-label*='review'], div.F7nice span[aria-label*='ulasan']")
+                        if review_el:
+                            try:
+                                review_text = await review_el.get_attribute("aria-label") or ""
+                                # Extract number from "123 reviews" or "123 ulasan"
+                                import re
+                                nums = re.findall(r'[\d,\.]+', review_text.replace(".", "").replace(",", ""))
+                                if nums:
+                                    review_count = int(nums[0])
+                            except (ValueError, TypeError):
+                                pass
+
+                        has_website = bool(website)
+
+                        self._log(f"[GMAPS]    ✅ Phone: {phone} | Web: {'Yes' if has_website else 'No'} | Cat: {category}")
+
+                        prospects.append({
+                            "name": name,
+                            "category": category or "Local Business",
+                            "address": address,
+                            "phone": phone,
+                            "email": email,
+                            "website": website,
+                            "has_website": has_website,
+                            "rating": rating,
+                            "review_count": review_count,
+                            "maps_url": maps_url,
+                            "source": "Google Maps",
+                            "source_keyword": keywords,
+                        })
+
+                        # --- Step 4: Go back to results list ---
+                        back_btn = await page.query_selector("button[aria-label='Back'], button[jsaction*='back']")
+                        if back_btn:
+                            await back_btn.click()
+                        else:
+                            await page.go_back()
+                        await asyncio.sleep(random.uniform(1.5, 2.5))
+
+                        # Wait for the feed to reappear
+                        try:
+                            await page.wait_for_selector("div[role='feed'], div.Nv2PK", timeout=5000)
+                        except Exception:
+                            await asyncio.sleep(2)
+
+                    except Exception as e:
+                        self._log(f"[GMAPS]    ⚠️ Error inspecting listing: {str(e)[:80]}")
+                        # Try to recover — go back
+                        try:
+                            back_btn = await page.query_selector("button[aria-label='Back']")
+                            if back_btn:
+                                await back_btn.click()
+                            else:
+                                await page.go_back()
+                            await asyncio.sleep(2)
+                        except Exception:
+                            pass
                         continue
 
             except Exception as e:
-                self._log(f"[GMAPS] Error: {str(e)}")
+                self._log(f"[GMAPS] ❌ Fatal error: {str(e)}")
 
             await browser.close()
 
-        # Sort: businesses WITHOUT websites first (hotter leads)
-        leads.sort(key=lambda x: x.get("has_website", True))
-        print(f"[GMAPS] {len(leads)} businesses found. {sum(1 for l in leads if not l.get('has_website', True))} without website (hot leads!).")
-        return leads
+        # Sort: businesses WITHOUT websites first (hotter prospects)
+        prospects.sort(key=lambda x: x.get("has_website", True))
+        hot = sum(1 for p in prospects if not p.get("has_website", True))
+        self._log(f"[GMAPS] 🏁 {len(prospects)} prospects with phone (skipped {skipped_no_phone} without phone). {hot} without website (hot!)")
+        return prospects
 
 
 # Testing lokal
@@ -466,4 +573,5 @@ if __name__ == "__main__":
     scraper = JobScraper(headless=False)
     results = asyncio.run(scraper.scrape_all("Pondok Pesantren", "Jawa Timur", ["gmaps"], limit=5))
     for r in results:
-        print(f"  [{r['source']}] {r['title']} | {r.get('description', '')}")
+        print(f"  [{r.get('source', 'GMaps')}] {r.get('name', r.get('title', '?'))} | Phone: {r.get('phone', '-')}")
+

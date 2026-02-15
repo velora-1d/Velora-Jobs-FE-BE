@@ -4,13 +4,14 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import { LayoutDashboard, Database, Search, Settings, LogOut, Hexagon, GitBranch, Calendar, Send, FileText, Sun, Moon, Monitor } from 'lucide-react';
+import { LayoutDashboard, Database, Search, Settings, LogOut, Hexagon, GitBranch, Calendar, Send, FileText, Sun, Moon, Monitor, Building2 } from 'lucide-react';
 import { WhatsAppIcon } from './ui/WhatsAppIcon';
 
 const navItems = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Scraper', href: '/scraper', icon: Search },
     { name: 'Leads', href: '/leads', icon: Database },
+    { name: 'Prospects', href: '/prospects', icon: Building2 },
     { name: 'Pipeline', href: '/pipeline', icon: GitBranch },
     { name: 'Tasks', href: '/tasks', icon: Calendar },
     { name: 'Campaigns', href: '/campaigns', icon: WhatsAppIcon },

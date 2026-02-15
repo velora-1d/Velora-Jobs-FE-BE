@@ -174,6 +174,44 @@ class CampaignResponse(CampaignBase, TimestampMixin):
     id: int
 
 # ---------------------------------------------------------------------
+# PROSPECT MODELS (Google Maps)
+# ---------------------------------------------------------------------
+
+class ProspectBase(BaseModel):
+    name: str = "New Prospect"
+    category: str = "Local Business"
+    address: Optional[str] = None
+    phone: str  # REQUIRED
+    email: Optional[str] = None
+    website: Optional[str] = None
+    has_website: bool = False
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+    maps_url: Optional[str] = None
+    match_score: Optional[float] = None
+    match_reason: Optional[str] = None
+    status: str = "new"
+    source_keyword: Optional[str] = None
+
+class ProspectCreate(ProspectBase):
+    pass
+
+class ProspectUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    has_website: Optional[bool] = None
+    status: Optional[str] = None
+    match_score: Optional[float] = None
+    match_reason: Optional[str] = None
+
+class ProspectResponse(ProspectBase, TimestampMixin):
+    id: int
+
+# ---------------------------------------------------------------------
 # SETTINGS & MISC
 # ---------------------------------------------------------------------
 

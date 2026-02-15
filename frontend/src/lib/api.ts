@@ -92,6 +92,33 @@ export interface Campaign {
     created_at?: string;
 }
 
+export interface Prospect {
+    id: number;
+    name: string;
+    category: string;
+    address?: string;
+    phone: string;
+    email?: string;
+    website?: string;
+    has_website: boolean;
+    rating?: number;
+    review_count?: number;
+    maps_url?: string;
+    match_score?: number;
+    match_reason?: string;
+    status: string;
+    source_keyword?: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface ProspectStats {
+    total: number;
+    contacted: number;
+    won: number;
+    without_website: number;
+}
+
 function authHeaders(): HeadersInit {
     const token = localStorage.getItem('token');
     return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
@@ -276,7 +303,32 @@ export const api = {
         return authFetch(`${API_URL}/api/campaigns/stop`, { method: 'POST' });
     },
 
+    // ─── Prospects ───
+    async getProspects(startDate?: string, endDate?: string, category?: string, status?: string): Promise<Prospect[]> {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate);
+        if (endDate) params.append('end_date', endDate);
+        if (category) params.append('category', category);
+        if (status) params.append('status', status);
+        const qs = params.toString() ? `?${params.toString()}` : '';
+        return authFetch(`${API_URL}/api/prospects${qs}`);
+    },
 
+    async getProspectStats(): Promise<ProspectStats> {
+        return authFetch(`${API_URL}/api/prospects/stats`);
+    },
+
+    async createProspect(data: Partial<Prospect>) {
+        return authFetch(`${API_URL}/api/prospects`, { method: 'POST', body: JSON.stringify(data) });
+    },
+
+    async updateProspect(id: number, data: Partial<Prospect>) {
+        return authFetch(`${API_URL}/api/prospects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+
+    async deleteProspect(id: number) {
+        return authFetch(`${API_URL}/api/prospects/${id}`, { method: 'DELETE' });
+    },
 
     // ─── Export (CSV) ───
     async exportCSV(type: 'leads' | 'projects' | 'invoices') {

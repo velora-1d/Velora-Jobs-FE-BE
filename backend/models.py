@@ -110,3 +110,25 @@ class Campaign(Base):
     scheduled_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=get_wib_now, index=True)
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
+
+class Prospect(Base):
+    """Google Maps business prospects — separate from job leads."""
+    __tablename__ = "prospects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)               # Business name
+    category = Column(String, index=True)            # e.g. "Pesantren", "Sekolah Dasar", "Toko Bangunan"
+    address = Column(Text, nullable=True)            # Full address
+    phone = Column(String, nullable=False)            # REQUIRED — WA/Telp number
+    email = Column(String, nullable=True)             # Business email
+    website = Column(String, nullable=True)           # Website URL
+    has_website = Column(Boolean, default=False)      # Quick flag
+    rating = Column(Float, nullable=True)             # Google Maps rating (1-5)
+    review_count = Column(Integer, nullable=True)     # Number of reviews
+    maps_url = Column(String, unique=True, index=True) # Google Maps link (dedup key)
+    match_score = Column(Float, nullable=True)        # AI scorer result
+    match_reason = Column(Text, nullable=True)        # AI scorer reason
+    status = Column(String, default="new", index=True) # new, contacted, negotiation, won, lost
+    source_keyword = Column(String, nullable=True)    # Keyword used during scraping
+    created_at = Column(DateTime, default=get_wib_now, index=True)
+    updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)

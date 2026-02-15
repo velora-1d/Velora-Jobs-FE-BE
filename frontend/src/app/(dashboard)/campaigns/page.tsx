@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import useSWR from 'swr';
-import { Send, Users, Zap, Plus, X, Edit, Trash2, Calendar, Play, Pause, CheckCircle2 } from 'lucide-react';
+import { Send, Users, Zap, Plus, X, Edit, Trash2, Calendar, Play, Pause, CheckCircle2, Search } from 'lucide-react';
 import { api, fetcher, Campaign } from '@/lib/api';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
@@ -18,6 +18,10 @@ export default function CampaignsPage() {
     const [showModal, setShowModal] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
     const [deleteId, setDeleteId] = useState<number | null>(null);
+
+    // Filters
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Runner State
     const [runnerStatus, setRunnerStatus] = useState<any>(null);
@@ -128,20 +132,41 @@ export default function CampaignsPage() {
         setEditId(null);
     };
 
+    const filteredCampaigns = useMemo(() => {
+        return campaigns.filter(c => {
+            const matchStatus = filterStatus === 'all' || c.status === filterStatus;
+            const matchSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
+            return matchStatus && matchSearch;
+        });
+    }, [campaigns, filterStatus, searchQuery]);
+
     const selectedCampaign = campaigns.find(c => c.id === selectedId);
 
     return (
         <div className="w-full h-[calc(100vh-8rem)] flex flex-col">
-            <div className="flex justify-between items-center mb-8 flex-shrink-0">
-                <div>
-                    <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-                        <Send className="w-8 h-8 text-primary" /> Campaign Automation
-                    </h1>
-                    <p className="text-muted-foreground mt-2">Scale your outreach without getting blocked</p>
+            <div className="flex flex-col gap-4 mb-8 flex-shrink-0">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+                            <Send className="w-8 h-8 text-primary" /> Campaign Automation
+                        </h1>
+                        <p className="text-muted-foreground mt-2">Scale your outreach without getting blocked · {filteredCampaigns.length} campaigns</p>
+                    </div>
+                    <button onClick={openCreate} className="flex items-center gap-2 bg-[#25D366] hover:bg-[#20ba59] text-white px-6 py-3 rounded-xl transition-all font-bold shadow-[0_0_20px_rgba(37,211,102,0.3)]">
+                        <Plus className="w-5 h-5" /> New Campaign
+                    </button>
                 </div>
-                <button onClick={openCreate} className="flex items-center gap-2 bg-[#25D366] hover:bg-[#20ba59] text-white px-6 py-3 rounded-xl transition-all font-bold shadow-[0_0_20px_rgba(37,211,102,0.3)]">
-                    <Plus className="w-5 h-5" /> New Campaign
-                </button>
+                <div className="flex items-center gap-3">
+                    <div className="bg-accent/20 p-1 rounded-xl border border-border flex items-center">
+                        {['all', 'draft', 'active', 'paused', 'completed'].map(s => (
+                            <button key={s} onClick={() => setFilterStatus(s)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all capitalize ${filterStatus === s ? 'bg-blue-600 text-white shadow-lg' : 'text-muted-foreground hover:text-foreground'}`}>{s === 'all' ? 'All' : s}</button>
+                        ))}
+                    </div>
+                    <div className="relative flex-1 max-w-xs">
+                        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search campaigns..." className="w-full bg-input border border-border rounded-xl py-2.5 pl-10 pr-4 text-sm text-foreground focus:outline-none focus:border-blue-500/30" />
+                    </div>
+                </div>
             </div>
 
             {/* Live Console (Visible if polling or running) */}
@@ -199,8 +224,8 @@ export default function CampaignsPage() {
                     <h2 className="text-lg font-bold text-foreground mb-6 flex-shrink-0">Recent Campaigns</h2>
                     {loading ? <p className="text-muted-foreground">Loading...</p> : (
                         <div className="space-y-4 flex-1">
-                            {campaigns.length === 0 && <p className="text-muted-foreground text-sm">No campaigns yet.</p>}
-                            {campaigns.map(c => (
+                            {filteredCampaigns.length === 0 && <p className="text-muted-foreground text-sm">No campaigns found.</p>}
+                            {filteredCampaigns.map(c => (
                                 <div key={c.id} onClick={() => setSelectedId(c.id)}
                                     className={`p-4 rounded-xl border transition-all cursor-pointer group ${selectedId === c.id ? 'bg-primary/10 border-primary/50' : 'bg-muted/30 border-border hover:border-primary/30'}`}>
                                     <div className="flex justify-between items-start mb-2">

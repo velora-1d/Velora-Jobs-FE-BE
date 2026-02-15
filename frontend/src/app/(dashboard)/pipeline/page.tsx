@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import useSWR from 'swr';
 import { api, fetcher, FollowUp, Project, Invoice, InvoiceItem, Lead } from '@/lib/api';
 import {
-    Loader2, GitBranch, Plus, Clock, Phone as PhoneIcon, Mail, Users,
-    Calendar, DollarSign, FileText, Briefcase,
-    CheckCircle2, Trash2, Download, Edit
+    Plus, Edit, Trash2, Clock, Briefcase, FileText, Download,
+    Calendar, DollarSign, Phone as PhoneIcon, Mail, Users, Search,
+    Loader2, CheckCircle2, ChevronDown
 } from 'lucide-react';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { Pagination } from '@/components/ui/Pagination';
 
 // ═══════════════════════════════════════════════════
 // ──── FOLLOW-UP TAB ────
@@ -20,6 +21,13 @@ function FollowUpTab() {
     const [showConfirm, setShowConfirm] = useState(false);
     const [deleteId, setDeleteId] = useState<number | null>(null);
     const [form, setForm] = useState({ lead_id: 0, type: 'wa', note: '', next_follow_date: '' });
+
+    // Filters
+    const [filterType, setFilterType] = useState('all');
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(15);
 
     // SWR
     const { data: itemsData, mutate: mutateItems } = useSWR<FollowUp[]>(`${api.API_URL}/api/followups`, fetcher);
@@ -109,12 +117,49 @@ function FollowUpTab() {
         return new Date(date) < new Date(new Date().toISOString().split('T')[0]);
     };
 
+    const filteredItems = useMemo(() => {
+        return items.filter(fu => {
+            const matchType = filterType === 'all' || fu.type === filterType;
+            const matchStatus = filterStatus === 'all' || fu.status === filterStatus;
+            const matchSearch = !searchQuery
+                || (fu.lead_title || '').toLowerCase().includes(searchQuery.toLowerCase())
+                || fu.note.toLowerCase().includes(searchQuery.toLowerCase());
+            return matchType && matchStatus && matchSearch;
+        });
+    }, [items, filterType, filterStatus, searchQuery]);
+
+    useEffect(() => { setCurrentPage(1); }, [filterType, filterStatus, searchQuery]);
+
+    const paginatedItems = useMemo(() => {
+        const start = (currentPage - 1) * pageSize;
+        return filteredItems.slice(start, start + pageSize);
+    }, [filteredItems, currentPage, pageSize]);
+
     if (loading) return <div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mr-3" /> Loading...</div>;
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <p className="text-muted-foreground text-sm">{items.filter(i => i.status === 'pending').length} pending follow-ups</p>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                    <select value={filterType} onChange={e => setFilterType(e.target.value)} className="appearance-none px-4 py-2.5 rounded-xl text-muted-foreground text-sm bg-accent/20 border border-border focus:outline-none focus:border-blue-500/30 cursor-pointer">
+                        <option value="all" className="bg-popover text-popover-foreground">All Types</option>
+                        <option value="wa" className="bg-popover text-popover-foreground">WhatsApp</option>
+                        <option value="call" className="bg-popover text-popover-foreground">Phone Call</option>
+                        <option value="email" className="bg-popover text-popover-foreground">Email</option>
+                        <option value="meeting" className="bg-popover text-popover-foreground">Meeting</option>
+                    </select>
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="appearance-none px-4 py-2.5 rounded-xl text-muted-foreground text-sm bg-accent/20 border border-border focus:outline-none focus:border-blue-500/30 cursor-pointer">
+                        <option value="all" className="bg-popover text-popover-foreground">All Status</option>
+                        <option value="pending" className="bg-popover text-popover-foreground">Pending</option>
+                        <option value="done" className="bg-popover text-popover-foreground">Done</option>
+                        <option value="skipped" className="bg-popover text-popover-foreground">Skipped</option>
+                    </select>
+                    <div className="relative">
+                        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search..." className="bg-input border border-border rounded-xl py-2.5 pl-10 pr-4 text-sm text-foreground focus:outline-none focus:border-blue-500/30 w-48" />
+                    </div>
+                    <span className="text-muted-foreground text-xs font-mono">{filteredItems.length} results</span>
+                </div>
                 <div className="flex gap-2">
                     <button onClick={() => api.exportCSV('leads')} className="flex items-center gap-2 px-4 py-2 border border-border text-muted-foreground hover:text-foreground rounded-xl text-sm transition-all"><Download className="w-4 h-4" /> Export</button>
                     <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-sm font-bold transition-all"><Plus className="w-4 h-4" /> Add Follow-up</button>
@@ -164,40 +209,49 @@ function FollowUpTab() {
                 </div>
             )}
 
-            {items.length === 0 ? (
-                <div className="text-center py-20 text-muted-foreground"><Clock className="w-12 h-12 mx-auto mb-4 opacity-30" /><p className="text-lg">No follow-ups yet.</p></div>
+            {filteredItems.length === 0 ? (
+                <div className="text-center py-20 text-muted-foreground"><Clock className="w-12 h-12 mx-auto mb-4 opacity-30" /><p className="text-lg">No follow-ups found.</p></div>
             ) : (
-                <div className="space-y-3">
-                    {items.map(fu => (
-                        <div key={fu.id} className={`glass-panel bg-card border border-border rounded-2xl p-5 flex items-start gap-4 group transition-all ${fu.status === 'done' ? 'opacity-60' : ''}`}>
-                            <div className="p-2 rounded-xl bg-accent border border-border">{typeIcon(fu.type)}</div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-foreground font-medium text-sm">{fu.lead_title}</span>
-                                    <span className="text-muted-foreground text-xs">·</span>
-                                    <span className="text-muted-foreground text-xs">{fu.lead_company}</span>
+                <>
+                    <div className="space-y-3">
+                        {paginatedItems.map(fu => (
+                            <div key={fu.id} className={`glass-panel bg-card border border-border rounded-2xl p-5 flex items-start gap-4 group transition-all ${fu.status === 'done' ? 'opacity-60' : ''}`}>
+                                <div className="p-2 rounded-xl bg-accent border border-border">{typeIcon(fu.type)}</div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-foreground font-medium text-sm">{fu.lead_title}</span>
+                                        <span className="text-muted-foreground text-xs">·</span>
+                                        <span className="text-muted-foreground text-xs">{fu.lead_company}</span>
+                                    </div>
+                                    {fu.note && <p className="text-muted-foreground text-xs mt-1 line-clamp-2">{fu.note}</p>}
+                                    <div className="flex items-center gap-3 mt-2">
+                                        {fu.next_follow_date && (
+                                            <span className={`text-[10px] font-mono flex items-center gap-1 ${isOverdue(fu.next_follow_date) && fu.status === 'pending' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                                <Calendar className="w-3 h-3" /> {fu.next_follow_date}
+                                                {isOverdue(fu.next_follow_date) && fu.status === 'pending' && <span className="text-destructive font-bold ml-1">OVERDUE</span>}
+                                            </span>
+                                        )}
+                                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-widest ${statusColor(fu.status)}`}>{fu.status}</span>
+                                    </div>
                                 </div>
-                                {fu.note && <p className="text-muted-foreground text-xs mt-1 line-clamp-2">{fu.note}</p>}
-                                <div className="flex items-center gap-3 mt-2">
-                                    {fu.next_follow_date && (
-                                        <span className={`text-[10px] font-mono flex items-center gap-1 ${isOverdue(fu.next_follow_date) && fu.status === 'pending' ? 'text-destructive' : 'text-muted-foreground'}`}>
-                                            <Calendar className="w-3 h-3" /> {fu.next_follow_date}
-                                            {isOverdue(fu.next_follow_date) && fu.status === 'pending' && <span className="text-destructive font-bold ml-1">OVERDUE</span>}
-                                        </span>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => openEdit(fu)} className="p-2 text-muted-foreground hover:text-blue-500"><Edit className="w-4 h-4" /></button>
+                                    <button onClick={() => handleDelete(fu.id)} className="p-2 text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
+                                    {fu.status === 'pending' && (
+                                        <button onClick={() => markDone(fu.id)} className="p-2 text-muted-foreground hover:text-emerald-500"><CheckCircle2 className="w-5 h-5" /></button>
                                     )}
-                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-widest ${statusColor(fu.status)}`}>{fu.status}</span>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => openEdit(fu)} className="p-2 text-muted-foreground hover:text-blue-500"><Edit className="w-4 h-4" /></button>
-                                <button onClick={() => handleDelete(fu.id)} className="p-2 text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
-                                {fu.status === 'pending' && (
-                                    <button onClick={() => markDone(fu.id)} className="p-2 text-muted-foreground hover:text-emerald-500"><CheckCircle2 className="w-5 h-5" /></button>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalItems={filteredItems.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                    />
+                </>
             )}
 
             <ConfirmModal
@@ -224,6 +278,12 @@ function ProjectsTab() {
     const [showConfirm, setShowConfirm] = useState(false);
     const [deleteId, setDeleteId] = useState<number | null>(null);
     const [form, setForm] = useState({ lead_id: 0, name: '', description: '', budget: '', deadline: '' });
+
+    // Filters
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(15);
 
     // SWR
     const { data: projectsData, mutate: mutateProjects } = useSWR<Project[]>(`${api.API_URL}/api/projects`, fetcher);
@@ -308,12 +368,43 @@ function ProjectsTab() {
     };
 
     const formatCurrency = (n: number | null) => n != null ? `Rp ${n.toLocaleString('id-ID')}` : '-';
+
+    const filteredProjects = useMemo(() => {
+        return projects.filter(p => {
+            const matchStatus = filterStatus === 'all' || p.status === filterStatus;
+            const matchSearch = !searchQuery
+                || p.name.toLowerCase().includes(searchQuery.toLowerCase())
+                || (p.lead_company || '').toLowerCase().includes(searchQuery.toLowerCase());
+            return matchStatus && matchSearch;
+        });
+    }, [projects, filterStatus, searchQuery]);
+
+    useEffect(() => { setCurrentPage(1); }, [filterStatus, searchQuery]);
+
+    const paginatedProjects = useMemo(() => {
+        const start = (currentPage - 1) * pageSize;
+        return filteredProjects.slice(start, start + pageSize);
+    }, [filteredProjects, currentPage, pageSize]);
+
     if (loading) return <div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mr-3" /> Loading...</div>;
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <p className="text-muted-foreground text-sm">{projects.filter(p => p.status === 'active').length} active projects</p>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="appearance-none px-4 py-2.5 rounded-xl text-muted-foreground text-sm bg-accent/20 border border-border focus:outline-none focus:border-blue-500/30 cursor-pointer">
+                        <option value="all" className="bg-popover text-popover-foreground">All Status</option>
+                        <option value="negotiation" className="bg-popover text-popover-foreground">Negotiation</option>
+                        <option value="active" className="bg-popover text-popover-foreground">Active</option>
+                        <option value="completed" className="bg-popover text-popover-foreground">Completed</option>
+                        <option value="cancelled" className="bg-popover text-popover-foreground">Cancelled</option>
+                    </select>
+                    <div className="relative">
+                        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search projects..." className="bg-input border border-border rounded-xl py-2.5 pl-10 pr-4 text-sm text-foreground focus:outline-none focus:border-blue-500/30 w-48" />
+                    </div>
+                    <span className="text-muted-foreground text-xs font-mono">{filteredProjects.length} projects</span>
+                </div>
                 <div className="flex gap-2">
                     <button onClick={() => api.exportCSV('projects')} className="flex items-center gap-2 px-4 py-2 border border-border text-muted-foreground hover:text-foreground rounded-xl text-sm transition-all"><Download className="w-4 h-4" /> Export</button>
                     <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-sm font-bold transition-all"><Plus className="w-4 h-4" /> New Project</button>
@@ -358,50 +449,59 @@ function ProjectsTab() {
                 </div>
             )}
 
-            {projects.length === 0 ? (
-                <div className="text-center py-20 text-muted-foreground"><Briefcase className="w-12 h-12 mx-auto mb-4 opacity-30" /><p className="text-lg">No projects yet.</p></div>
+            {filteredProjects.length === 0 ? (
+                <div className="text-center py-20 text-muted-foreground"><Briefcase className="w-12 h-12 mx-auto mb-4 opacity-30" /><p className="text-lg">No projects found.</p></div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {projects.map(p => (
-                        <div key={p.id} className="glass-panel bg-card border border-border rounded-2xl p-6 space-y-4 group relative">
-                            <div className="flex items-start justify-between">
-                                <div><h4 className="text-foreground font-bold">{p.name}</h4><p className="text-muted-foreground text-xs mt-0.5">{p.lead_company}</p></div>
-                                <div className="relative">
-                                    <select value={p.status} onChange={e => updateStatus(p.id, e.target.value)}
-                                        className={`appearance-none px-3 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-widest cursor-pointer ${statusColors[p.status] || statusColors.negotiation}`}>
-                                        <option value="negotiation" className="bg-popover">Negotiation</option>
-                                        <option value="active" className="bg-popover">Active</option>
-                                        <option value="completed" className="bg-popover">Completed</option>
-                                        <option value="cancelled" className="bg-popover">Cancelled</option>
-                                    </select>
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {paginatedProjects.map(p => (
+                            <div key={p.id} className="glass-panel bg-card border border-border rounded-2xl p-6 space-y-4 group relative">
+                                <div className="flex items-start justify-between">
+                                    <div><h4 className="text-foreground font-bold">{p.name}</h4><p className="text-muted-foreground text-xs mt-0.5">{p.lead_company}</p></div>
+                                    <div className="relative">
+                                        <select value={p.status} onChange={e => updateStatus(p.id, e.target.value)}
+                                            className={`appearance-none px-3 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-widest cursor-pointer ${statusColors[p.status] || statusColors.negotiation}`}>
+                                            <option value="negotiation" className="bg-popover">Negotiation</option>
+                                            <option value="active" className="bg-popover">Active</option>
+                                            <option value="completed" className="bg-popover">Completed</option>
+                                            <option value="cancelled" className="bg-popover">Cancelled</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs text-muted-foreground font-mono">Progress</span>
+                                        <span className="text-xs text-foreground font-bold">{p.progress}%</span>
+                                    </div>
+                                    <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                                        <div className="bg-gradient-to-r from-blue-500 to-cyan-400 h-full rounded-full transition-all duration-500" style={{ width: `${p.progress}%` }} />
+                                    </div>
+                                    <div className="flex gap-2 mt-2">
+                                        {[0, 25, 50, 75, 100].map(v => (
+                                            <button key={v} onClick={() => updateProgress(p.id, v)} className={`text-[9px] px-2 py-1 rounded border transition-all ${p.progress === v ? 'bg-primary/20 border-primary/40 text-primary' : 'bg-muted border-border text-muted-foreground hover:text-foreground'}`}>{v}%</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t border-border">
+                                    <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> {formatCurrency(p.budget)}</span>
+                                    {p.deadline && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {p.deadline}</span>}
+                                    <span className="flex items-center gap-1"><FileText className="w-3 h-3" /> {p.invoice_count} inv</span>
+                                </div>
+                                <div className="absolute top-4 right-12 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-popover p-1 rounded-lg border border-border">
+                                    <button onClick={() => openEdit(p)} className="p-1 hover:text-blue-500"><Edit className="w-4 h-4" /></button>
+                                    <button onClick={() => handleDelete(p.id)} className="p-1 hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
                                 </div>
                             </div>
-                            <div>
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs text-muted-foreground font-mono">Progress</span>
-                                    <span className="text-xs text-foreground font-bold">{p.progress}%</span>
-                                </div>
-                                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                                    <div className="bg-gradient-to-r from-blue-500 to-cyan-400 h-full rounded-full transition-all duration-500" style={{ width: `${p.progress}%` }} />
-                                </div>
-                                <div className="flex gap-2 mt-2">
-                                    {[0, 25, 50, 75, 100].map(v => (
-                                        <button key={v} onClick={() => updateProgress(p.id, v)} className={`text-[9px] px-2 py-1 rounded border transition-all ${p.progress === v ? 'bg-primary/20 border-primary/40 text-primary' : 'bg-muted border-border text-muted-foreground hover:text-foreground'}`}>{v}%</button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t border-border">
-                                <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> {formatCurrency(p.budget)}</span>
-                                {p.deadline && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {p.deadline}</span>}
-                                <span className="flex items-center gap-1"><FileText className="w-3 h-3" /> {p.invoice_count} inv</span>
-                            </div>
-                            <div className="absolute top-4 right-12 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-popover p-1 rounded-lg border border-border">
-                                <button onClick={() => openEdit(p)} className="p-1 hover:text-blue-500"><Edit className="w-4 h-4" /></button>
-                                <button onClick={() => handleDelete(p.id)} className="p-1 hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalItems={filteredProjects.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                    />
+                </>
             )}
 
             <ConfirmModal
@@ -429,6 +529,12 @@ function InvoicesTab() {
     const [deleteId, setDeleteId] = useState<number | null>(null);
     const [form, setForm] = useState({ project_id: 0, items: [{ desc: '', qty: 1, price: 0 }] as InvoiceItem[], tax_percent: 0, due_date: '', notes: '' });
 
+    // Filters
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(15);
+
     // SWR
     const { data: invoicesData, mutate: mutateInvoices } = useSWR<Invoice[]>(`${api.API_URL}/api/invoices`, fetcher);
     const { data: projectsData } = useSWR<Project[]>(`${api.API_URL}/api/projects`, fetcher);
@@ -453,7 +559,7 @@ function InvoicesTab() {
         try {
             if (editId) {
                 await api.updateInvoice(editId, {
-                    status: 'draft', // or keep existing status? simplified for now
+                    status: 'draft',
                     items: form.items,
                     tax_percent: form.tax_percent,
                     due_date: form.due_date || undefined,
@@ -520,12 +626,44 @@ function InvoicesTab() {
     };
 
     const formatCurrency = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
+
+    const filteredInvoices = useMemo(() => {
+        return invoices.filter(inv => {
+            const matchStatus = filterStatus === 'all' || inv.status === filterStatus;
+            const matchSearch = !searchQuery
+                || (inv.invoice_number || '').toLowerCase().includes(searchQuery.toLowerCase())
+                || (inv.project_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+                || (inv.client_name || '').toLowerCase().includes(searchQuery.toLowerCase());
+            return matchStatus && matchSearch;
+        });
+    }, [invoices, filterStatus, searchQuery]);
+
+    useEffect(() => { setCurrentPage(1); }, [filterStatus, searchQuery]);
+
+    const paginatedInvoices = useMemo(() => {
+        const start = (currentPage - 1) * pageSize;
+        return filteredInvoices.slice(start, start + pageSize);
+    }, [filteredInvoices, currentPage, pageSize]);
+
     if (loading) return <div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mr-3" /> Loading...</div>;
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <p className="text-muted-foreground text-sm">{invoices.length} invoices · {formatCurrency(invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0))} paid</p>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="appearance-none px-4 py-2.5 rounded-xl text-muted-foreground text-sm bg-accent/20 border border-border focus:outline-none focus:border-blue-500/30 cursor-pointer">
+                        <option value="all" className="bg-popover text-popover-foreground">All Status</option>
+                        <option value="draft" className="bg-popover text-popover-foreground">Draft</option>
+                        <option value="sent" className="bg-popover text-popover-foreground">Sent</option>
+                        <option value="paid" className="bg-popover text-popover-foreground">Paid</option>
+                        <option value="overdue" className="bg-popover text-popover-foreground">Overdue</option>
+                    </select>
+                    <div className="relative">
+                        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search invoices..." className="bg-input border border-border rounded-xl py-2.5 pl-10 pr-4 text-sm text-foreground focus:outline-none focus:border-blue-500/30 w-48" />
+                    </div>
+                    <span className="text-muted-foreground text-xs font-mono">{filteredInvoices.length} invoices · {formatCurrency(filteredInvoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0))} paid</span>
+                </div>
                 <div className="flex gap-2">
                     <button onClick={() => api.exportCSV('invoices')} className="flex items-center gap-2 px-4 py-2 border border-border text-muted-foreground hover:text-foreground rounded-xl text-sm transition-all"><Download className="w-4 h-4" /> Export</button>
                     <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-sm font-bold transition-all"><Plus className="w-4 h-4" /> New Invoice</button>
@@ -575,50 +713,59 @@ function InvoicesTab() {
                 </div>
             )}
 
-            {invoices.length === 0 ? (
-                <div className="text-center py-20 text-muted-foreground"><FileText className="w-12 h-12 mx-auto mb-4 opacity-30" /><p className="text-lg">No invoices yet.</p></div>
+            {filteredInvoices.length === 0 ? (
+                <div className="text-center py-20 text-muted-foreground"><FileText className="w-12 h-12 mx-auto mb-4 opacity-30" /><p className="text-lg">No invoices found.</p></div>
             ) : (
-                <div className="overflow-x-auto glass-panel bg-card border border-border rounded-2xl">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="border-b border-border text-xs font-mono text-muted-foreground uppercase tracking-widest">
-                                <th className="px-6 py-4">Invoice</th>
-                                <th className="px-6 py-4">Client</th>
-                                <th className="px-6 py-4">Project</th>
-                                <th className="px-6 py-4">Total</th>
-                                <th className="px-6 py-4">Due</th>
-                                <th className="px-6 py-4">Status</th>
-                                <th className="px-6 py-4 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                            {invoices.map(inv => (
-                                <tr key={inv.id} className="hover:bg-accent/50 transition-colors group">
-                                    <td className="px-6 py-4 text-foreground font-mono text-sm font-bold">{inv.invoice_number}</td>
-                                    <td className="px-6 py-4 text-muted-foreground text-sm">{inv.client_name}</td>
-                                    <td className="px-6 py-4 text-muted-foreground text-sm">{inv.project_name}</td>
-                                    <td className="px-6 py-4 text-foreground font-mono text-sm">{formatCurrency(inv.total)}</td>
-                                    <td className="px-6 py-4 text-muted-foreground text-xs font-mono">{inv.due_date || '-'}</td>
-                                    <td className="px-6 py-4">
-                                        <select value={inv.status} onChange={e => updateStatus(inv.id, e.target.value)} className={`appearance-none px-3 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-widest cursor-pointer bg-transparent ${statusColors[inv.status] || statusColors.draft}`}>
-                                            <option value="draft" className="bg-popover">Draft</option>
-                                            <option value="sent" className="bg-popover">Sent</option>
-                                            <option value="paid" className="bg-popover">Paid</option>
-                                            <option value="overdue" className="bg-popover">Overdue</option>
-                                        </select>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => openEdit(inv)} className="p-2 text-muted-foreground hover:text-blue-500"><Edit className="w-4 h-4" /></button>
-                                            <button onClick={() => handleDelete(inv.id)} className="p-2 text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
-                                            <button onClick={() => window.open(`${api.API_URL}/api/invoices/${inv.id}/download`, '_blank')} className="p-2 text-muted-foreground hover:text-emerald-500"><Download className="w-4 h-4" /></button>
-                                        </div>
-                                    </td>
+                <>
+                    <div className="overflow-x-auto glass-panel bg-card border border-border rounded-2xl">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="border-b border-border text-xs font-mono text-muted-foreground uppercase tracking-widest">
+                                    <th className="px-6 py-4">Invoice</th>
+                                    <th className="px-6 py-4">Client</th>
+                                    <th className="px-6 py-4">Project</th>
+                                    <th className="px-6 py-4">Total</th>
+                                    <th className="px-6 py-4">Due</th>
+                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4 text-right">Actions</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {paginatedInvoices.map(inv => (
+                                    <tr key={inv.id} className="hover:bg-accent/50 transition-colors group">
+                                        <td className="px-6 py-4 text-foreground font-mono text-sm font-bold">{inv.invoice_number}</td>
+                                        <td className="px-6 py-4 text-muted-foreground text-sm">{inv.client_name}</td>
+                                        <td className="px-6 py-4 text-muted-foreground text-sm">{inv.project_name}</td>
+                                        <td className="px-6 py-4 text-foreground font-mono text-sm">{formatCurrency(inv.total)}</td>
+                                        <td className="px-6 py-4 text-muted-foreground text-xs font-mono">{inv.due_date || '-'}</td>
+                                        <td className="px-6 py-4">
+                                            <select value={inv.status} onChange={e => updateStatus(inv.id, e.target.value)} className={`appearance-none px-3 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-widest cursor-pointer bg-transparent ${statusColors[inv.status] || statusColors.draft}`}>
+                                                <option value="draft" className="bg-popover">Draft</option>
+                                                <option value="sent" className="bg-popover">Sent</option>
+                                                <option value="paid" className="bg-popover">Paid</option>
+                                                <option value="overdue" className="bg-popover">Overdue</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => openEdit(inv)} className="p-2 text-muted-foreground hover:text-blue-500"><Edit className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDelete(inv.id)} className="p-2 text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
+                                                <button onClick={() => window.open(`${api.API_URL}/api/invoices/${inv.id}/download`, '_blank')} className="p-2 text-muted-foreground hover:text-emerald-500"><Download className="w-4 h-4" /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalItems={filteredInvoices.length}
+                        pageSize={pageSize}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                    />
+                </>
             )}
 
             <ConfirmModal
@@ -646,31 +793,29 @@ const TABS = [
 ];
 
 export default function PipelinePage() {
-    const [activeTab, setActiveTab] = useState('followup');
+    const [tab, setTab] = useState('followup');
 
     return (
         <div className="w-full">
-            <div className="mb-10">
+            <div className="mb-8">
                 <h1 className="text-4xl font-bold text-foreground tracking-tight flex items-center gap-3">
-                    <GitBranch className="w-8 h-8 text-primary fill-primary/20" /> Pipeline
+                    <Briefcase className="w-8 h-8 text-primary" /> Pipeline
                 </h1>
-                <p className="text-muted-foreground mt-2 text-lg">Manage follow-ups, projects & invoices.</p>
+                <p className="text-muted-foreground mt-2 text-lg">Manage your follow-ups, projects, and invoices</p>
             </div>
 
-            <div className="flex gap-2 mb-8 border-b border-border pb-4">
-                {TABS.map(tab => {
-                    const TabIcon = tab.Icon;
-                    return (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-primary/15 text-primary border border-primary/30' : 'text-muted-foreground hover:text-foreground hover:bg-accent border border-transparent'}`}>
-                            <TabIcon className="w-4 h-4" /> {tab.label}
-                        </button>
-                    );
-                })}
+            <div className="bg-accent/20 p-1 rounded-2xl border border-border flex items-center mb-8 w-fit">
+                {TABS.map(t => (
+                    <button key={t.id} onClick={() => setTab(t.id)}
+                        className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${tab === t.id ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'}`}>
+                        <t.Icon className="w-4 h-4" /> {t.label}
+                    </button>
+                ))}
             </div>
 
-            {activeTab === 'followup' && <FollowUpTab />}
-            {activeTab === 'projects' && <ProjectsTab />}
-            {activeTab === 'invoices' && <InvoicesTab />}
+            {tab === 'followup' && <FollowUpTab />}
+            {tab === 'projects' && <ProjectsTab />}
+            {tab === 'invoices' && <InvoicesTab />}
         </div>
     );
 }
