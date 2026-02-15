@@ -96,7 +96,7 @@ export interface ActivityLog {
     category: string;
     level: string;
     message: string;
-    metadata?: string;
+    details?: string;
     created_at: string;
 }
 

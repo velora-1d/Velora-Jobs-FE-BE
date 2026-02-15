@@ -157,5 +157,5 @@ class ActivityLog(Base):
     category = Column(String, index=True)  # scraper, ai_scoring, campaign, system, enrichment
     level = Column(String, default="info", index=True)  # info, warning, error
     message = Column(Text, nullable=False)  # Human-readable description
-    metadata = Column(Text, nullable=True)  # JSON string for extra details (AI reasoning, stats, etc.)
+    details = Column(Text, nullable=True)  # JSON string for extra details (AI reasoning, stats, etc.)
     created_at = Column(DateTime, default=get_wib_now, index=True)

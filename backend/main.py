@@ -1308,7 +1308,7 @@ async def get_ai_briefing(db: Session = Depends(get_db), current_user: User = De
         category="ai_scoring",
         level="info",
         message="AI Mission Briefing generated",
-        metadata=json.dumps({"model": "deepseek-r1", "stats": stats}),
+        details=json.dumps({"model": "deepseek-r1", "stats": stats}),
         created_at=datetime.now()
     )
     db.add(log)
@@ -1343,7 +1343,7 @@ async def enrich_lead(
         category="enrichment",
         level="info",
         message=f"Lead #{lead_id} enriched via Kimi-K2",
-        metadata=json.dumps({"model": "kimi-k2", "lead_id": lead_id, "result": enrichment}),
+        details=json.dumps({"model": "kimi-k2", "lead_id": lead_id, "result": enrichment}),
         created_at=datetime.now()
     )
     db.add(log)
@@ -1373,7 +1373,7 @@ async def generate_template(
         category="campaign",
         level="info",
         message=f"Campaign template generated for {target_category}",
-        metadata=json.dumps({"model": "glm-4", "category": target_category, "service": service_type}),
+        details=json.dumps({"model": "glm-4", "category": target_category, "service": service_type}),
         created_at=datetime.now()
     )
     db.add(log)

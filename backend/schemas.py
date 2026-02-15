@@ -250,7 +250,7 @@ class ActivityLogBase(BaseModel):
     category: str  # scraper, ai_scoring, campaign, system, enrichment
     level: str = "info"  # info, warning, error
     message: str
-    metadata: Optional[str] = None  # JSON string
+    details: Optional[str] = None  # JSON string
 
 class ActivityLogCreate(ActivityLogBase):
     pass

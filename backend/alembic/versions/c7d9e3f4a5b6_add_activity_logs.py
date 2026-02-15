@@ -22,7 +22,7 @@ def upgrade():
         sa.Column('category', sa.String(), nullable=True),
         sa.Column('level', sa.String(), nullable=True),
         sa.Column('message', sa.Text(), nullable=False),
-        sa.Column('metadata', sa.Text(), nullable=True),
+        sa.Column('details', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint('id')
     )
