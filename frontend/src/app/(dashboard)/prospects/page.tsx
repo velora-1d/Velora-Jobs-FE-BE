@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Pagination } from '@/components/ui/Pagination';
+import { ScoreBadge, StatusBadge } from '@/components/shared/Badges';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
 import * as XLSX from 'xlsx';
 
@@ -31,32 +32,6 @@ const WA_TEMPLATES = [
         message: `Halo, selamat siang 👋\n\nPerkenalkan saya {{nama_saya}}, seorang fullstack developer profesional.\n\nSaya melihat {{nama_prospect}} dan ingin menawarkan jasa pembuatan aplikasi/website yang bisa membantu digitalisasi bisnis Bapak/Ibu.\n\nLayanan saya meliputi:\n✅ Website company profile\n✅ Aplikasi manajemen internal\n✅ Sistem informasi custom\n✅ E-commerce & katalog online\n\nApakah berkenan untuk berdiskusi? Terima kasih. 🙏`,
     },
 ];
-
-// ─── Helper Badges ────────────────────────
-function ScoreBadge({ score }: { score?: number }) {
-    if (score === undefined || score === null) return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-muted/20 text-muted-foreground border border-border uppercase tracking-wider">N/A</span>;
-    let color = 'bg-red-500/10 text-red-500 border-red-500/20';
-    let label = 'Low';
-    if (score >= 75) { color = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'; label = 'High'; }
-    else if (score >= 50) { color = 'bg-amber-500/10 text-amber-500 border-amber-500/20'; label = 'Mid'; }
-    return (
-        <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${color}`}>{label}</span>
-            <span className="text-[10px] text-muted-foreground font-mono">{score}%</span>
-        </div>
-    );
-}
-
-function StatusBadge({ status }: { status: string }) {
-    const map: Record<string, string> = {
-        'new': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-        'contacted': 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-        'negotiation': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-        'won': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-        'lost': 'bg-red-500/10 text-red-500 border-red-500/20',
-    };
-    return <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-widest ${map[status] || map['new']}`}>{status}</span>;
-}
 
 // ─── WA Outreach Modal ────────────────────────
 function WAModal({ prospect, onClose, myName }: { prospect: Prospect; onClose: () => void; myName: string }) {

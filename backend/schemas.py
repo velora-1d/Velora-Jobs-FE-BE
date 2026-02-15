@@ -158,6 +158,8 @@ class CampaignBase(BaseModel):
     status: str = "draft"
     message_template: Optional[str] = None
     target_criteria: Optional[str] = None # JSON string
+    target_type: str = "leads"  # "leads" or "prospects"
+    template_id: Optional[int] = None
     scheduled_at: Optional[datetime] = None
 
 class CampaignCreate(CampaignBase):
@@ -168,9 +170,35 @@ class CampaignUpdate(BaseModel):
     status: Optional[str] = None
     message_template: Optional[str] = None
     target_criteria: Optional[str] = None
+    target_type: Optional[str] = None
+    template_id: Optional[int] = None
     scheduled_at: Optional[datetime] = None
 
 class CampaignResponse(CampaignBase, TimestampMixin):
+    id: int
+    sent_count: int = 0
+    failed_count: int = 0
+
+# ---------------------------------------------------------------------
+# PROMOTION TEMPLATE MODELS
+# ---------------------------------------------------------------------
+
+class TemplateBase(BaseModel):
+    title: str
+    category: str = "general"  # pesantren, sekolah, umkm, general
+    content: str
+    variables: Optional[str] = None  # JSON list
+
+class TemplateCreate(TemplateBase):
+    pass
+
+class TemplateUpdate(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    content: Optional[str] = None
+    variables: Optional[str] = None
+
+class TemplateResponse(TemplateBase, TimestampMixin):
     id: int
 
 # ---------------------------------------------------------------------

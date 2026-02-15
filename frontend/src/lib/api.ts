@@ -74,12 +74,21 @@ export interface Stats {
     total_leads: number;
     new_leads: number;
     contacted: number;
+    interested: number;
     won: number;
+    total_prospects: number;
+    prospects_contacted: number;
+    prospects_won: number;
     active_projects: number;
     total_projects: number;
     pending_followups: number;
     total_revenue: number;
     unpaid_invoices: number;
+    total_campaigns: number;
+    active_campaigns: number;
+    total_sent: number;
+    total_failed: number;
+    weekly: { date: string; leads: number; prospects: number }[];
 }
 
 export interface Campaign {
@@ -88,8 +97,22 @@ export interface Campaign {
     status: string;
     message_template?: string;
     target_criteria?: string;
+    target_type?: string;
+    template_id?: number;
+    sent_count?: number;
+    failed_count?: number;
     scheduled_at?: string;
     created_at?: string;
+}
+
+export interface PromotionTemplate {
+    id: number;
+    title: string;
+    category: string;
+    content: string;
+    variables?: string;
+    created_at?: string;
+    updated_at?: string;
 }
 
 export interface Prospect {
@@ -301,6 +324,27 @@ export const api = {
 
     async stopCampaign() {
         return authFetch(`${API_URL}/api/campaigns/stop`, { method: 'POST' });
+    },
+
+    // ─── Promotion Templates ───
+    async getTemplates(): Promise<PromotionTemplate[]> {
+        return authFetch(`${API_URL}/api/templates`);
+    },
+
+    async createTemplate(data: { title: string; category: string; content: string; variables?: string }) {
+        return authFetch(`${API_URL}/api/templates`, { method: 'POST', body: JSON.stringify(data) });
+    },
+
+    async updateTemplate(id: number, data: Partial<PromotionTemplate>) {
+        return authFetch(`${API_URL}/api/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+
+    async deleteTemplate(id: number) {
+        return authFetch(`${API_URL}/api/templates/${id}`, { method: 'DELETE' });
+    },
+
+    async seedTemplates() {
+        return authFetch(`${API_URL}/api/templates/seed`, { method: 'POST' });
     },
 
     // ─── Prospects ───

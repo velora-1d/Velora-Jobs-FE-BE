@@ -107,7 +107,23 @@ class Campaign(Base):
     status = Column(String, default="draft", index=True)  # draft, scheduled, running, completed
     message_template = Column(Text, nullable=True)
     target_criteria = Column(Text, nullable=True)  # JSON string
+    target_type = Column(String, default="leads")  # "leads" or "prospects"
+    template_id = Column(Integer, nullable=True)   # FK to promotion_templates (optional)
+    sent_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
     scheduled_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=get_wib_now, index=True)
+    updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
+
+class PromotionTemplate(Base):
+    """Reusable message templates for WhatsApp campaigns."""
+    __tablename__ = "promotion_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)           # e.g. "Pesantren Outreach"
+    category = Column(String, default="general")     # pesantren, sekolah, umkm, general
+    content = Column(Text, nullable=False)           # Message with {name}, {company} placeholders
+    variables = Column(Text, nullable=True)          # JSON list of available variables
     created_at = Column(DateTime, default=get_wib_now, index=True)
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
 

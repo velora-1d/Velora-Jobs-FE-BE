@@ -7,7 +7,7 @@ from datetime import timedelta
 import asyncio
 import os
 from auth import verify_password, get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
-from models import User, Lead, Setting, Prospect
+from models import User, Lead, Setting, Prospect, PromotionTemplate, Campaign
 import schemas
 from typing import List
 
@@ -403,7 +403,71 @@ async def delete_campaign(id: int, db: Session = Depends(get_db), current_user: 
     db.commit()
     return {"status": "deleted"}
 
-# ... (campaign runner endpoints remain same, as they use ID only)
+# ---------------------------------------------------------------------
+# PROMOTION TEMPLATES CRUD
+# ---------------------------------------------------------------------
+
+@app.get("/api/templates", response_model=List[schemas.TemplateResponse])
+async def get_templates(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return db.query(PromotionTemplate).order_by(PromotionTemplate.created_at.desc()).all()
+
+@app.post("/api/templates", response_model=schemas.TemplateResponse)
+async def create_template(data: schemas.TemplateCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    tmpl = PromotionTemplate(**data.model_dump())
+    db.add(tmpl)
+    db.commit()
+    db.refresh(tmpl)
+    return tmpl
+
+@app.put("/api/templates/{template_id}", response_model=schemas.TemplateResponse)
+async def update_template(template_id: int, data: schemas.TemplateUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    tmpl = db.query(PromotionTemplate).filter(PromotionTemplate.id == template_id).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    for key, val in data.model_dump(exclude_unset=True).items():
+        setattr(tmpl, key, val)
+    db.commit()
+    db.refresh(tmpl)
+    return tmpl
+
+@app.delete("/api/templates/{template_id}")
+async def delete_template(template_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    tmpl = db.query(PromotionTemplate).filter(PromotionTemplate.id == template_id).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    db.delete(tmpl)
+    db.commit()
+    return {"status": "deleted"}
+
+@app.post("/api/templates/seed")
+async def seed_templates(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Seed default promotion templates if none exist."""
+    existing = db.query(PromotionTemplate).count()
+    if existing > 0:
+        return {"message": f"{existing} templates already exist", "seeded": 0}
+    defaults = [
+        PromotionTemplate(
+            title="Outreach Pesantren",
+            category="pesantren",
+            content="Assalamu'alaikum {name},\n\nPerkenalkan saya dari Velora. Kami menyediakan layanan pembuatan website dan sistem digital untuk pesantren.\n\nApakah {company} sudah memiliki website resmi? Kami bisa bantu buatkan dengan harga terjangkau.\n\nTerima kasih 🙏",
+            variables='["name", "company"]'
+        ),
+        PromotionTemplate(
+            title="Outreach UMKM",
+            category="umkm",
+            content="Halo {name},\n\nSalam kenal, saya dari Velora. Kami membantu UMKM go digital dengan website profesional dan sistem manajemen.\n\nApakah {company} tertarik untuk meningkatkan kehadiran online?\n\nInfo lebih lanjut: https://ve-lora.my.id",
+            variables='["name", "company"]'
+        ),
+        PromotionTemplate(
+            title="Follow-up Umum",
+            category="general",
+            content="Halo {name},\n\nSaya ingin follow up terkait penawaran kami sebelumnya untuk {company}.\n\nApakah ada pertanyaan atau hal yang bisa kami bantu?\n\nTerima kasih 🙏",
+            variables='["name", "company"]'
+        ),
+    ]
+    db.add_all(defaults)
+    db.commit()
+    return {"message": "Seeded 3 default templates", "seeded": 3}
 
 @app.post("/api/leads", response_model=schemas.LeadResponse)
 async def create_lead(lead_in: schemas.LeadCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -1137,31 +1201,67 @@ async def delete_invoice(inv_id: int, db: Session = Depends(get_db), current_use
 
 @app.get("/api/stats")
 async def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    from models import Lead, FollowUp, Project, Invoice
+    from models import Lead, FollowUp, Project, Invoice, Prospect, Campaign
+    from datetime import datetime, timedelta
     
+    # Lead counts
     total_leads = db.query(Lead).count()
     new_leads = db.query(Lead).filter(Lead.status == "new").count()
     contacted = db.query(Lead).filter(Lead.status == "contacted").count()
+    interested = db.query(Lead).filter(Lead.status == "interested").count()
     won = db.query(Lead).filter(Lead.status == "won").count()
     
+    # Prospect counts
+    total_prospects = db.query(Prospect).count()
+    prospects_contacted = db.query(Prospect).filter(Prospect.status == "contacted").count()
+    prospects_won = db.query(Prospect).filter(Prospect.status == "won").count()
+    
+    # Project & Invoice
     active_projects = db.query(Project).filter(Project.status == "active").count()
     total_projects = db.query(Project).count()
-    
     pending_followups = db.query(FollowUp).filter(FollowUp.status == "pending").count()
-    
     total_revenue = sum(i.total for i in db.query(Invoice).filter(Invoice.status == "paid").all())
     unpaid_invoices = db.query(Invoice).filter(Invoice.status.in_(["sent", "overdue"])).count()
+    
+    # Campaign stats
+    total_campaigns = db.query(Campaign).count()
+    active_campaigns = db.query(Campaign).filter(Campaign.status == "active").count()
+    total_sent = sum(c.sent_count or 0 for c in db.query(Campaign).all())
+    total_failed = sum(c.failed_count or 0 for c in db.query(Campaign).all())
+    
+    # Weekly outreach data (last 7 days)
+    weekly = []
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        next_day = day + timedelta(days=1)
+        day_leads = db.query(Lead).filter(Lead.created_at >= day, Lead.created_at < next_day).count()
+        day_prospects = db.query(Prospect).filter(Prospect.created_at >= day, Prospect.created_at < next_day).count()
+        weekly.append({
+            "date": day.strftime("%a"),
+            "leads": day_leads,
+            "prospects": day_prospects,
+        })
     
     return {
         "total_leads": total_leads,
         "new_leads": new_leads,
         "contacted": contacted,
+        "interested": interested,
         "won": won,
+        "total_prospects": total_prospects,
+        "prospects_contacted": prospects_contacted,
+        "prospects_won": prospects_won,
         "active_projects": active_projects,
         "total_projects": total_projects,
         "pending_followups": pending_followups,
         "total_revenue": total_revenue,
         "unpaid_invoices": unpaid_invoices,
+        "total_campaigns": total_campaigns,
+        "active_campaigns": active_campaigns,
+        "total_sent": total_sent,
+        "total_failed": total_failed,
+        "weekly": weekly,
     }
 
 # --- Telegram ---

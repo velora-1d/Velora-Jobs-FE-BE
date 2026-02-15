@@ -9,46 +9,9 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Pagination } from '@/components/ui/Pagination';
+import { ScoreBadge, StatusBadge, SourceBadge } from '@/components/shared/Badges';
 import * as XLSX from 'xlsx';
 
-// ─── Utility Components ────────────────────────
-function MatchBadge({ score }: { score?: number }) {
-    if (score === undefined || score === null) {
-        return <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-muted/20 text-muted-foreground border border-border uppercase tracking-wider">N/A</span>;
-    }
-    let color = 'bg-red-500/10 text-red-500 border-red-500/20';
-    let label = 'Low';
-    if (score >= 75) { color = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'; label = 'High'; }
-    else if (score >= 50) { color = 'bg-amber-500/10 text-amber-500 border-amber-500/20'; label = 'Mid'; }
-    return (
-        <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${color}`}>{label}</span>
-            <span className="text-[10px] text-muted-foreground font-mono">{score}%</span>
-        </div>
-    );
-}
-
-function SourceBadge({ source }: { source: string }) {
-    const colors: Record<string, string> = {
-        'LinkedIn': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-        'Upwork': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-        'Indeed': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-        'Glints': 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
-        'Manual': 'bg-muted/20 text-muted-foreground border-border',
-    };
-    return <span className={`px-2 py-1 rounded text-[10px] font-bold border uppercase tracking-wider ${colors[source] || 'bg-muted/20 text-muted-foreground border-border'}`}>{source}</span>;
-}
-
-function StatusBadge({ status }: { status: string }) {
-    const map: Record<string, string> = {
-        'new': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-        'contacted': 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-        'interested': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-        'rejected': 'bg-red-500/10 text-red-500 border-red-500/20',
-        'won': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-    };
-    return <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-widest ${map[status] || map['new']}`}>{status}</span>;
-}
 
 // ─── Lead Form Modal ────────────────────────
 function LeadModal({ lead, onClose, onSave }: { lead?: Lead | null, onClose: () => void, onSave: (data: Partial<Lead>) => void }) {
@@ -297,7 +260,7 @@ export default function LeadsPage() {
                                                 <div className="font-medium text-foreground group-hover:text-emerald-500 transition-colors max-w-[250px] truncate">{lead.title}</div>
                                                 <div className="text-xs text-muted-foreground">{lead.company}</div>
                                             </td>
-                                            <td className="px-6 py-5"><MatchBadge score={lead.match_score} /></td>
+                                            <td className="px-6 py-5"><ScoreBadge score={lead.match_score} /></td>
                                             <td className="px-6 py-5 text-muted-foreground max-w-[120px] truncate">{lead.location}</td>
                                             <td className="px-6 py-5"><SourceBadge source={lead.source} /></td>
                                             <td className="px-6 py-5"><StatusBadge status={lead.status} /></td>
