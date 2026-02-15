@@ -14,3 +14,4 @@ httpx>=0.26.0
 gunicorn>=21.2.0
 pytz
 python-multipart>=0.0.9
+email-validator>=2.1.0
