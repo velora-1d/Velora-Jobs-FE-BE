@@ -677,6 +677,7 @@ async def send_wa_individual(payload: dict, db: Session = Depends(get_db), curre
     phone = payload.get("phone")
     message = payload.get("message")
     lead_id = payload.get("lead_id")
+    prospect_id = payload.get("prospect_id")
 
     if not phone or not message:
         raise HTTPException(status_code=400, detail="Phone and message are required")
@@ -687,17 +688,40 @@ async def send_wa_individual(payload: dict, db: Session = Depends(get_db), curre
         message
     )
 
-    if success and lead_id:
-        # Record as FollowUp
-        from models import FollowUp, get_wib_now
-        followup = FollowUp(
-            lead_id=lead_id,
-            type="wa_individual",
-            note="Sent via Individual Outreach",
-            status="done",
-            created_at=get_wib_now()
-        )
-        db.add(followup)
+    if success:
+        from models import FollowUp, Prospect, get_wib_now
+        now = get_wib_now()
+        
+        if lead_id:
+            lead = db.query(Lead).filter(Lead.id == lead_id).first()
+            if lead:
+                lead.status = "contacted"
+                if not lead.wa_contacted_at:
+                    lead.wa_contacted_at = now
+            followup = FollowUp(
+                lead_id=lead_id,
+                type="wa",
+                note=f"WA sent: {message[:100]}{'...' if len(message) > 100 else ''}",
+                status="done",
+                created_at=now
+            )
+            db.add(followup)
+        
+        if prospect_id:
+            prospect = db.query(Prospect).filter(Prospect.id == prospect_id).first()
+            if prospect:
+                prospect.status = "contacted"
+                if not prospect.wa_contacted_at:
+                    prospect.wa_contacted_at = now
+            followup = FollowUp(
+                prospect_id=prospect_id,
+                type="wa",
+                note=f"WA sent: {message[:100]}{'...' if len(message) > 100 else ''}",
+                status="done",
+                created_at=now
+            )
+            db.add(followup)
+        
         db.commit()
 
     return {"success": success}
@@ -792,12 +816,47 @@ async def send_whatsapp(payload: schemas.WhatsAppSend, db: Session = Depends(get
             )
             result = response.json()
         
-        # Update lead status if successful and lead_id provided
-        if lead_id and result.get("status"):
-            lead = db.query(Lead).filter(Lead.id == lead_id).first()
-            if lead:
-                lead.status = "contacted"
-                db.commit()
+        # Update lead/prospect status + auto-create FollowUp
+        if result.get("status"):
+            from models import FollowUp, Prospect, get_wib_now
+            now = get_wib_now()
+            
+            # Handle Lead
+            if lead_id:
+                lead = db.query(Lead).filter(Lead.id == lead_id).first()
+                if lead:
+                    lead.status = "contacted"
+                    if not lead.wa_contacted_at:
+                        lead.wa_contacted_at = now
+                    # Auto-create FollowUp for Pipeline
+                    followup = FollowUp(
+                        lead_id=lead_id,
+                        type="wa",
+                        note=f"WA sent: {message[:100]}{'...' if len(message) > 100 else ''}",
+                        status="done",
+                        created_at=now
+                    )
+                    db.add(followup)
+                    db.commit()
+            
+            # Handle Prospect
+            prospect_id = payload.prospect_id
+            if prospect_id:
+                prospect = db.query(Prospect).filter(Prospect.id == prospect_id).first()
+                if prospect:
+                    prospect.status = "contacted"
+                    if not prospect.wa_contacted_at:
+                        prospect.wa_contacted_at = now
+                    # Auto-create FollowUp for Pipeline
+                    followup = FollowUp(
+                        prospect_id=prospect_id,
+                        type="wa",
+                        note=f"WA sent: {message[:100]}{'...' if len(message) > 100 else ''}",
+                        status="done",
+                        created_at=now
+                    )
+                    db.add(followup)
+                    db.commit()
         
         return {
             "success": result.get("status", False),
@@ -813,13 +872,14 @@ async def send_whatsapp(payload: schemas.WhatsAppSend, db: Session = Depends(get
 
 @app.get("/api/followups", response_model=List[schemas.FollowUpResponse])
 async def get_followups(lead_id: int = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    from models import FollowUp, Lead
+    from models import FollowUp, Lead, Prospect
     from sqlalchemy.orm import joinedload
     
-    query = db.query(FollowUp).options(joinedload(FollowUp.lead)).order_by(FollowUp.created_at.desc())
+    query = db.query(FollowUp).options(joinedload(FollowUp.lead), joinedload(FollowUp.prospect)).order_by(FollowUp.created_at.desc())
     
     if lead_id:
         query = query.filter(FollowUp.lead_id == lead_id)
+    prospect_id_filter = None  # Could add query param later
     follow_ups = query.all()
     
     # Map to schema (Pydantic orm_mode handles most, but we need flattened fields)
@@ -828,8 +888,11 @@ async def get_followups(lead_id: int = None, db: Session = Depends(get_db), curr
         results.append({
             "id": fu.id,
             "lead_id": fu.lead_id,
-            "lead_title": fu.lead.title if fu.lead else "Unknown",
-            "lead_company": fu.lead.company if fu.lead else "",
+            "prospect_id": fu.prospect_id,
+            "lead_title": fu.lead.title if fu.lead else (fu.prospect.name if fu.prospect else "Unknown"),
+            "lead_company": fu.lead.company if fu.lead else (fu.prospect.category if fu.prospect else ""),
+            "prospect_name": fu.prospect.name if fu.prospect else None,
+            "prospect_category": fu.prospect.category if fu.prospect else None,
             "type": fu.type,
             "note": fu.note,
             "status": fu.status,
@@ -841,14 +904,26 @@ async def get_followups(lead_id: int = None, db: Session = Depends(get_db), curr
 
 @app.post("/api/followups", response_model=schemas.FollowUpResponse)
 async def create_followup(fu_in: schemas.FollowUpCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    from models import FollowUp, Lead
+    from models import FollowUp, Lead, Prospect
     
-    lead = db.query(Lead).filter(Lead.id == fu_in.lead_id).first()
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
+    # Validate: must have either lead_id or prospect_id
+    if not fu_in.lead_id and not fu_in.prospect_id:
+        raise HTTPException(status_code=400, detail="lead_id or prospect_id required")
+    
+    lead = None
+    prospect = None
+    if fu_in.lead_id:
+        lead = db.query(Lead).filter(Lead.id == fu_in.lead_id).first()
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+    if fu_in.prospect_id:
+        prospect = db.query(Prospect).filter(Prospect.id == fu_in.prospect_id).first()
+        if not prospect:
+            raise HTTPException(status_code=404, detail="Prospect not found")
     
     fu = FollowUp(
         lead_id=fu_in.lead_id,
+        prospect_id=fu_in.prospect_id,
         type=fu_in.type,
         note=fu_in.note,
         status=fu_in.status,
@@ -862,8 +937,11 @@ async def create_followup(fu_in: schemas.FollowUpCreate, db: Session = Depends(g
     return {
         "id": fu.id,
         "lead_id": fu.lead_id,
-        "lead_title": lead.title,
-        "lead_company": lead.company,
+        "prospect_id": fu.prospect_id,
+        "lead_title": lead.title if lead else (prospect.name if prospect else "Unknown"),
+        "lead_company": lead.company if lead else (prospect.category if prospect else ""),
+        "prospect_name": prospect.name if prospect else None,
+        "prospect_category": prospect.category if prospect else None,
         "type": fu.type,
         "note": fu.note,
         "status": fu.status,

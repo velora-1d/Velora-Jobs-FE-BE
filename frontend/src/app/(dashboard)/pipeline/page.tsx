@@ -60,7 +60,12 @@ function KanbanCard({ item, onEdit, onDelete, onStatusChange }: KanbanCardProps)
             </div>
 
             <h4 className="text-sm font-bold text-foreground line-clamp-1 group-hover:text-blue-500 transition-colors">{item.lead_title}</h4>
-            <p className="text-[11px] text-muted-foreground mb-3">{item.lead_company}</p>
+            <div className="flex items-center justify-between mb-3">
+                <p className="text-[11px] text-muted-foreground">{item.lead_company}</p>
+                {!item.lead_id && item.prospect_id && (
+                    <span className="text-[9px] font-mono bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 px-1.5 py-0.5 rounded">PROSPECT</span>
+                )}
+            </div>
 
             {item.note && (
                 <div className="bg-accent/20 rounded-xl p-2.5 mb-3 border border-border/30">
@@ -117,7 +122,7 @@ function FollowUpTab() {
     const [editId, setEditId] = useState<number | null>(null);
     const [showConfirm, setShowConfirm] = useState(false);
     const [deleteId, setDeleteId] = useState<number | null>(null);
-    const [form, setForm] = useState({ lead_id: 0, type: 'wa', note: '', next_follow_date: '' });
+    const [form, setForm] = useState({ lead_id: 0, prospect_id: 0, type: 'wa', note: '', next_follow_date: '' });
 
     // Filters
     const [filterType, setFilterType] = useState('all');
@@ -135,7 +140,7 @@ function FollowUpTab() {
     const loading = !itemsData;
 
     const handleSave = async () => {
-        if (!form.lead_id) return;
+        if (!form.lead_id && !form.prospect_id) return;
         try {
             if (editId) {
                 await api.updateFollowUp(editId, {
@@ -145,7 +150,8 @@ function FollowUpTab() {
                 });
             } else {
                 await api.createFollowUp({
-                    lead_id: form.lead_id,
+                    lead_id: form.lead_id || undefined,
+                    prospect_id: form.prospect_id || undefined,
                     type: form.type,
                     note: form.note,
                     next_follow_date: form.next_follow_date || undefined,
@@ -174,7 +180,8 @@ function FollowUpTab() {
     const openEdit = (f: FollowUp) => {
         setEditId(f.id);
         setForm({
-            lead_id: f.lead_id,
+            lead_id: f.lead_id || 0,
+            prospect_id: f.prospect_id || 0,
             type: f.type,
             note: f.note,
             next_follow_date: f.next_follow_date ? f.next_follow_date.split('T')[0] : ''
@@ -185,7 +192,7 @@ function FollowUpTab() {
     const closeModal = () => {
         setShowAdd(false);
         setEditId(null);
-        setForm({ lead_id: 0, type: 'wa', note: '', next_follow_date: '' });
+        setForm({ lead_id: 0, prospect_id: 0, type: 'wa', note: '', next_follow_date: '' });
     };
 
     const updateItemStatus = async (id: number, status: string) => {
@@ -246,11 +253,12 @@ function FollowUpTab() {
                         <div className="space-y-4">
                             <div>
                                 <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Lead / Client</label>
-                                <select value={form.lead_id} onChange={e => setForm({ ...form, lead_id: +e.target.value })} disabled={!!editId}
+                                <select value={form.lead_id} onChange={e => setForm({ ...form, lead_id: +e.target.value, prospect_id: 0 })} disabled={!!editId || form.prospect_id > 0}
                                     className="w-full bg-input border border-border rounded-xl py-4 px-4 text-foreground focus:outline-none focus:border-blue-500/50">
-                                    <option value={0}>Select lead...</option>
+                                    <option value={0}>{form.prospect_id ? 'Linked to Prospect' : 'Select lead...'}</option>
                                     {leads.map(l => <option key={l.id} value={l.id}>{l.title} — {l.company}</option>)}
                                 </select>
+                                {form.prospect_id > 0 && <p className="text-[10px] text-indigo-400 mt-1 ml-1">* Linked to Prospect (Cannot change to Lead)</p>}
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -278,7 +286,7 @@ function FollowUpTab() {
                         </div>
                         <div className="flex gap-3 justify-end pt-4">
                             <button onClick={closeModal} className="px-6 py-3 rounded-xl border border-border text-muted-foreground hover:text-foreground transition-all font-bold text-sm">Cancel</button>
-                            <button onClick={handleSave} disabled={!form.lead_id} className="px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-xl shadow-blue-500/20 disabled:opacity-40 transition-all">SAVE PROTOCOL</button>
+                            <button onClick={handleSave} disabled={!form.lead_id && !form.prospect_id} className="px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-xl shadow-blue-500/20 disabled:opacity-40 transition-all">SAVE PROTOCOL</button>
                         </div>
                     </div>
                 </div>

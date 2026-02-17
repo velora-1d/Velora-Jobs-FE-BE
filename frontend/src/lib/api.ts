@@ -15,14 +15,18 @@ export interface Lead {
     status: string;
     email?: string;
     rating?: number;
+    wa_contacted_at?: string;
     created_at?: string;
 }
 
 export interface FollowUp {
     id: number;
-    lead_id: number;
-    lead_title: string;
-    lead_company: string;
+    lead_id?: number;
+    prospect_id?: number;
+    lead_title?: string;
+    lead_company?: string;
+    prospect_name?: string;
+    prospect_category?: string;
     type: string;
     note: string;
     status: string;
@@ -161,6 +165,7 @@ export interface Prospect {
     match_reason?: string;
     status: string;
     source_keyword?: string;
+    wa_contacted_at?: string;
     created_at?: string;
     updated_at?: string;
 }
@@ -234,15 +239,11 @@ export const api = {
     },
 
     // ─── WhatsApp ───
-    async sendWA(target: string, message: string, leadId?: number): Promise<{ success: boolean; error?: string; detail?: string }> {
-        try {
-            return await authFetch(`${API_URL}/api/wa/send`, {
-                method: 'POST',
-                body: JSON.stringify({ target, message, lead_id: leadId }),
-            });
-        } catch {
-            return { success: false, error: 'Network error' };
-        }
+    async sendWA(target: string, message: string, leadId?: number, prospectId?: number): Promise<{ success: boolean; error?: string; detail?: string }> {
+        return authFetch(`${API_URL}/api/wa/send`, {
+            method: 'POST',
+            body: JSON.stringify({ target, message, lead_id: leadId, prospect_id: prospectId }),
+        });
     },
 
     // ─── Follow-ups ───
@@ -251,7 +252,7 @@ export const api = {
         return authFetch(`${API_URL}/api/followups${q}`);
     },
 
-    async createFollowUp(data: { lead_id: number; type?: string; note?: string; next_follow_date?: string }) {
+    async createFollowUp(data: { lead_id?: number; prospect_id?: number; type?: string; note?: string; next_follow_date?: string }) {
         return authFetch(`${API_URL}/api/followups`, { method: 'POST', body: JSON.stringify(data) });
     },
 

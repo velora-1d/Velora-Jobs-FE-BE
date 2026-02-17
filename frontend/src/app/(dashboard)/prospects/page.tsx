@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { api, fetcher, Prospect } from '@/lib/api';
 import {
     Loader2, Search, X, Phone, Building2, MapPin, Globe, Mail,
-    Plus, Edit, Trash2, ExternalLink, Star, Download, Wand2
+    Plus, Edit, Trash2, ExternalLink, Star, Download, Wand2, CheckCircle2
 } from 'lucide-react';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Pagination } from '@/components/ui/Pagination';
@@ -34,7 +34,7 @@ const WA_TEMPLATES = [
 ];
 
 // ─── WA Outreach Modal ────────────────────────
-function WAModal({ prospect, onClose, myName }: { prospect: Prospect; onClose: () => void; myName: string }) {
+function WAModal({ prospect, onClose, onSuccess, myName }: { prospect: Prospect; onClose: () => void; onSuccess: () => void; myName: string }) {
     const [selectedTemplate, setSelectedTemplate] = useState('pesantren');
     const [message, setMessage] = useState('');
     const [sending, setSending] = useState(false);
@@ -58,8 +58,10 @@ function WAModal({ prospect, onClose, myName }: { prospect: Prospect; onClose: (
         if (!waPhone || !message) return;
         setSending(true);
         try {
-            const result = await api.sendWA(waPhone, message);
+            // Pass prospect_id to backend
+            const result = await api.sendWA(waPhone, message, undefined, prospect.id);
             setSendResult(result);
+            if (result.success) onSuccess(); // Refresh data
         } catch { setSendResult({ success: false, error: 'Network error' }); }
         finally { setSending(false); }
     };
@@ -198,6 +200,7 @@ export default function ProspectsPage() {
     // Filters
     const [filterCategory, setFilterCategory] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
+    const [filterWaStatus, setFilterWaStatus] = useState('all'); // 'all', 'contacted', 'not_contacted'
     const [filterWebsite, setFilterWebsite] = useState('all');
     const [filterScore, setFilterScore] = useState('all');
     const [filterLabel, setFilterLabel] = useState('All Time');
@@ -268,6 +271,9 @@ export default function ProspectsPage() {
         return prospects.filter(p => {
             const matchCat = filterCategory === 'all' || p.category.toLowerCase().includes(filterCategory.toLowerCase());
             const matchStatus = filterStatus === 'all' || p.status === filterStatus;
+            const matchWaStatus = filterWaStatus === 'all'
+                || (filterWaStatus === 'contacted' && !!p.wa_contacted_at)
+                || (filterWaStatus === 'not_contacted' && !p.wa_contacted_at);
             const matchWebsite = filterWebsite === 'all'
                 || (filterWebsite === 'yes' && p.has_website)
                 || (filterWebsite === 'no' && !p.has_website);
@@ -276,9 +282,9 @@ export default function ProspectsPage() {
                 || (filterScore === 'mid' && (p.match_score || 0) >= 50 && (p.match_score || 0) < 75)
                 || (filterScore === 'low' && (p.match_score || 0) < 50);
             const matchSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.address || '').toLowerCase().includes(searchQuery.toLowerCase()) || p.phone.includes(searchQuery);
-            return matchCat && matchStatus && matchWebsite && matchScore && matchSearch;
+            return matchCat && matchStatus && matchWaStatus && matchWebsite && matchScore && matchSearch;
         });
-    }, [prospects, filterCategory, filterStatus, filterWebsite, filterScore, searchQuery]);
+    }, [prospects, filterCategory, filterStatus, filterWaStatus, filterWebsite, filterScore, searchQuery]);
 
     // Reset page when filters change
     useEffect(() => { setCurrentPage(1); }, [filterCategory, filterStatus, filterWebsite, filterScore, searchQuery]);
@@ -323,6 +329,12 @@ export default function ProspectsPage() {
                         <option value="negotiation" className="bg-popover text-popover-foreground">Negotiation</option>
                         <option value="won" className="bg-popover text-popover-foreground">Won</option>
                         <option value="lost" className="bg-popover text-popover-foreground">Lost</option>
+                    </select>
+                    {/* WA Status filter */}
+                    <select value={filterWaStatus} onChange={e => setFilterWaStatus(e.target.value)} className="appearance-none px-4 py-3 rounded-xl text-muted-foreground text-sm bg-accent/20 border border-border focus:outline-none focus:border-blue-500/30 cursor-pointer">
+                        <option value="all" className="bg-popover text-popover-foreground">All WA Status</option>
+                        <option value="contacted" className="bg-popover text-popover-foreground">✅ Sudah di-WA</option>
+                        <option value="not_contacted" className="bg-popover text-popover-foreground">Belum di-WA</option>
                     </select>
                     {/* Website filter */}
                     <select value={filterWebsite} onChange={e => setFilterWebsite(e.target.value)} className="appearance-none px-4 py-3 rounded-xl text-muted-foreground text-sm bg-accent/20 border border-border focus:outline-none focus:border-blue-500/30 cursor-pointer">
@@ -385,6 +397,11 @@ export default function ProspectsPage() {
                                             <td className="px-6 py-5">
                                                 <span className="text-xs font-mono text-emerald-500 flex items-center gap-1"><Phone className="w-3 h-3" /> {prospect.phone}</span>
                                                 {prospect.email && <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5"><Mail className="w-2.5 h-2.5" /> {prospect.email}</span>}
+                                                {prospect.wa_contacted_at && (
+                                                    <div className="mt-1 flex items-center gap-1 bg-emerald-500/10 text-emerald-500 px-1.5 py-0.5 rounded text-[10px] font-bold w-fit border border-emerald-500/20">
+                                                        <CheckCircle2 className="w-3 h-3" /> Sudah di-WA
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-5 text-muted-foreground text-xs max-w-[150px] truncate"><MapPin className="w-3 h-3 inline mr-1" />{prospect.address || '-'}</td>
                                             <td className="px-6 py-5">
@@ -419,7 +436,7 @@ export default function ProspectsPage() {
                 )}
             </div>
 
-            {waProspect && <WAModal prospect={waProspect} onClose={() => setWaProspect(null)} myName={myName} />}
+            {waProspect && <WAModal prospect={waProspect} onClose={() => setWaProspect(null)} onSuccess={() => mutate()} myName={myName} />}
             {showCreateModal && <ProspectFormModal onClose={() => setShowCreateModal(false)} onSave={handleCreate} />}
             {editProspect && <ProspectFormModal prospect={editProspect} onClose={() => setEditProspect(null)} onSave={handleUpdate} />}
 

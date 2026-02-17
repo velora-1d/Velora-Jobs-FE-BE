@@ -27,6 +27,7 @@ class Lead(Base):
     phone = Column(String, nullable=True)
     has_website = Column(Boolean, nullable=True)
     status = Column(String, default="new", index=True)  # new, contacted, negotiation, won, lost
+    wa_contacted_at = Column(DateTime, nullable=True)  # Timestamp when first WA was sent
     created_at = Column(DateTime, default=get_wib_now, index=True)
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
 
@@ -38,7 +39,8 @@ class FollowUp(Base):
     __tablename__ = "follow_ups"
 
     id = Column(Integer, primary_key=True, index=True)
-    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=True, index=True)
+    prospect_id = Column(Integer, ForeignKey("prospects.id"), nullable=True, index=True)
     type = Column(String, default="wa")  # wa, call, email, meeting
     note = Column(Text, nullable=True)
     status = Column(String, default="pending", index=True)  # pending, done, skipped
@@ -47,6 +49,7 @@ class FollowUp(Base):
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
 
     lead = relationship("Lead", back_populates="follow_ups")
+    prospect = relationship("Prospect", back_populates="follow_ups")
 
 class Project(Base):
     __tablename__ = "projects"
@@ -146,9 +149,13 @@ class Prospect(Base):
     match_score = Column(Float, nullable=True)        # AI scorer result
     match_reason = Column(Text, nullable=True)        # AI scorer reason
     status = Column(String, default="new", index=True) # new, contacted, negotiation, won, lost
+    wa_contacted_at = Column(DateTime, nullable=True)  # Timestamp when first WA was sent
     source_keyword = Column(String, nullable=True)    # Keyword used during scraping
     created_at = Column(DateTime, default=get_wib_now, index=True)
     updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
+
+    # Relationships
+    follow_ups = relationship("FollowUp", back_populates="prospect")
 
 class ActivityLog(Base):
     """Centralized audit log for all AI and automation activities."""

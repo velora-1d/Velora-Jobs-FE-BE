@@ -52,6 +52,7 @@ class LeadUpdate(BaseModel):
 
 class LeadResponse(LeadBase, TimestampMixin):
     id: int
+    wa_contacted_at: Optional[datetime] = None
 
 # ---------------------------------------------------------------------
 # FOLLOW-UP MODELS
@@ -64,7 +65,8 @@ class FollowUpBase(BaseModel):
     next_follow_date: Optional[date] = None
 
 class FollowUpCreate(FollowUpBase):
-    lead_id: int
+    lead_id: Optional[int] = None
+    prospect_id: Optional[int] = None
 
 class FollowUpUpdate(BaseModel):
     type: Optional[str] = None
@@ -74,9 +76,12 @@ class FollowUpUpdate(BaseModel):
 
 class FollowUpResponse(FollowUpBase, TimestampMixin):
     id: int
-    lead_id: int
+    lead_id: Optional[int] = None
+    prospect_id: Optional[int] = None
     lead_title: Optional[str] = None
     lead_company: Optional[str] = None
+    prospect_name: Optional[str] = None
+    prospect_category: Optional[str] = None
 
 # ---------------------------------------------------------------------
 # PROJECT MODELS
@@ -241,6 +246,7 @@ class ProspectUpdate(BaseModel):
 class Prospect(ProspectBase, TimestampMixin):
     id: int
     maps_url: str
+    wa_contacted_at: Optional[datetime] = None
 
 # ---------------------------------------------------------------------
 # ACTIVITY LOG MODELS
@@ -276,3 +282,4 @@ class WhatsAppSend(BaseModel):
     target: str
     message: str
     lead_id: Optional[int] = None
+    prospect_id: Optional[int] = None

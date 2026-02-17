@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { api, fetcher, Lead } from '@/lib/api';
 import {
     Loader2, ExternalLink, Database, Search, Download,
-    Plus, Edit, Trash2, X
+    Plus, Edit, Trash2, X, CheckCircle2
 } from 'lucide-react';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Pagination } from '@/components/ui/Pagination';
@@ -98,6 +98,7 @@ export default function LeadsPage() {
     // Filters
     const [filterSource, setFilterSource] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
+    const [filterWaStatus, setFilterWaStatus] = useState('all'); // 'all', 'contacted', 'not_contacted'
     const [filterScore, setFilterScore] = useState('all');
     const [filterLabel, setFilterLabel] = useState('All Time');
     const [searchQuery, setSearchQuery] = useState('');
@@ -161,6 +162,9 @@ export default function LeadsPage() {
         return leads.filter(lead => {
             const matchSource = filterSource === 'all' || lead.source === filterSource;
             const matchStatus = filterStatus === 'all' || lead.status === filterStatus;
+            const matchWaStatus = filterWaStatus === 'all'
+                || (filterWaStatus === 'contacted' && !!lead.wa_contacted_at)
+                || (filterWaStatus === 'not_contacted' && !lead.wa_contacted_at);
             const matchScore = filterScore === 'all'
                 || (filterScore === 'high' && (lead.match_score || 0) >= 75)
                 || (filterScore === 'mid' && (lead.match_score || 0) >= 50 && (lead.match_score || 0) < 75)
@@ -169,9 +173,9 @@ export default function LeadsPage() {
                 || lead.title.toLowerCase().includes(searchQuery.toLowerCase())
                 || lead.company.toLowerCase().includes(searchQuery.toLowerCase())
                 || lead.location.toLowerCase().includes(searchQuery.toLowerCase());
-            return matchSource && matchStatus && matchScore && matchSearch;
+            return matchSource && matchStatus && matchWaStatus && matchScore && matchSearch;
         });
-    }, [leads, filterSource, filterStatus, filterScore, searchQuery]);
+    }, [leads, filterSource, filterStatus, filterWaStatus, filterScore, searchQuery]);
 
     // Reset page when filters change
     useEffect(() => { setCurrentPage(1); }, [filterSource, filterStatus, filterScore, searchQuery]);
@@ -213,6 +217,12 @@ export default function LeadsPage() {
                         <option value="interested" className="bg-popover text-popover-foreground">Interested</option>
                         <option value="won" className="bg-popover text-popover-foreground">Won</option>
                         <option value="rejected" className="bg-popover text-popover-foreground">Rejected</option>
+                    </select>
+                    {/* WA Status filter */}
+                    <select value={filterWaStatus} onChange={(e) => setFilterWaStatus(e.target.value)} className="appearance-none px-4 py-3 rounded-xl text-muted-foreground text-sm bg-accent/20 border border-border focus:outline-none focus:border-blue-500/30 cursor-pointer">
+                        <option value="all" className="bg-popover text-popover-foreground">All WA Status</option>
+                        <option value="contacted" className="bg-popover text-popover-foreground">✅ Sudah di-WA</option>
+                        <option value="not_contacted" className="bg-popover text-popover-foreground">Belum di-WA</option>
                     </select>
                     {/* Score filter */}
                     <select value={filterScore} onChange={(e) => setFilterScore(e.target.value)} className="appearance-none px-4 py-3 rounded-xl text-muted-foreground text-sm bg-accent/20 border border-border focus:outline-none focus:border-blue-500/30 cursor-pointer">
@@ -263,7 +273,14 @@ export default function LeadsPage() {
                                             <td className="px-6 py-5"><ScoreBadge score={lead.match_score} /></td>
                                             <td className="px-6 py-5 text-muted-foreground max-w-[120px] truncate">{lead.location}</td>
                                             <td className="px-6 py-5"><SourceBadge source={lead.source} /></td>
-                                            <td className="px-6 py-5"><StatusBadge status={lead.status} /></td>
+                                            <td className="px-6 py-5">
+                                                <StatusBadge status={lead.status} />
+                                                {lead.wa_contacted_at && (
+                                                    <div className="mt-1 flex items-center gap-1 bg-emerald-500/10 text-emerald-500 px-1.5 py-0.5 rounded text-[10px] font-bold w-fit border border-emerald-500/20">
+                                                        <CheckCircle2 className="w-3 h-3" /> Sudah di-WA
+                                                    </div>
+                                                )}
+                                            </td>
                                             <td className="px-6 py-5">
                                                 <div className="flex items-center justify-end gap-2">
                                                     <button onClick={() => setEditLead(lead)} className="p-2 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500/20" title="Edit"><Edit className="w-4 h-4" /></button>
