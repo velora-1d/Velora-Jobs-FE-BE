@@ -184,7 +184,7 @@ export default function TasksPage() {
     const openEditModal = (event: CalendarEvent) => {
         setEditId(event.id);
         const t = event.resource as FollowUp;
-        setSelectedLeadId(t.lead_id.toString());
+        setSelectedLeadId(t.lead_id ? t.lead_id.toString() : '');
         setTaskNote(t.note);
         setTaskDate(t.next_follow_date ? t.next_follow_date.split('T')[0] : '');
         setTaskType(t.type);
