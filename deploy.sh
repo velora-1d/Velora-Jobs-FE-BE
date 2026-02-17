@@ -38,20 +38,20 @@ fi
 
 # 3. Build & Deploy Containers
 echo "🐳 Building Docker Containers..."
-docker-compose build
+docker compose build
 
 echo "🚀 Launching Services..."
-docker-compose up -d
+docker compose up -d
 
 # 4. Database Migration
 echo "📦 Running Database Migrations..."
 echo "⏳ Waiting for database to be ready..."
-until docker-compose exec db pg_isready -U postgres; do
+until docker compose exec db pg_isready -U postgres; do
   echo "Database is unavailable - sleeping"
   sleep 2
 done
 
-docker-compose exec backend alembic upgrade head
+docker compose exec backend alembic upgrade head
 
 # 5. Nginx & SSL Configuration
 echo "🌐 Configuring Nginx & SSL..."
