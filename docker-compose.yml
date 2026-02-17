@@ -7,7 +7,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: admin123
       POSTGRES_DB: velora_jobs
     ports:
       - "5435:5432"
@@ -33,7 +33,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql://postgres:password@db/velora_jobs
+      DATABASE_URL: postgresql://postgres:admin123@db/velora_jobs
     depends_on:
       - db
     networks:
