@@ -6,8 +6,9 @@ import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import {
     Plus, List, Calendar as CalendarIcon, CheckSquare, X,
-    ChevronLeft, ChevronRight, Hash, Clock, Trash2, Edit
+    ChevronLeft, ChevronRight, Hash, Clock, Trash2, Edit, Zap, AlertCircle
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import useSWR from 'swr';
 import { api, fetcher, FollowUp, Lead } from '@/lib/api';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -219,7 +220,7 @@ export default function TasksPage() {
                         Tasks & Schedule
                     </h1>
                     <p className="text-muted-foreground mt-2 font-medium flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-amber-500" />
+                        <Zap className="w-4 h-4 text-amber-500" />
                         Manage your follow-ups and strategic meetings
                     </p>
                 </div>
