@@ -30,6 +30,8 @@ services:
     restart: always
     ports:
       - "8001:8000"
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql://postgres:password@db/velora_jobs
     depends_on:

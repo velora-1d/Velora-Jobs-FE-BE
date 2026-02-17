@@ -113,7 +113,8 @@ export default function CampaignsPage() {
     const [editId, setEditId] = useState<number | null>(null);
     const [form, setForm] = useState({
         name: '', message_template: '', target_type: 'leads',
-        target_criteria: 'all', scheduled_at: '', template_id: 0
+        target_criteria: 'all', scheduled_at: '', template_id: 0,
+        smart_ai: false
     });
 
     const handleSaveCampaign = async (e: React.FormEvent) => {
@@ -125,7 +126,8 @@ export default function CampaignsPage() {
                 target_type: form.target_type,
                 target_criteria: JSON.stringify({ type: form.target_criteria }),
                 template_id: form.template_id || undefined,
-                scheduled_at: form.scheduled_at || undefined
+                scheduled_at: form.scheduled_at || undefined,
+                smart_ai: form.smart_ai
             };
             if (editId) {
                 await api.updateCampaign(editId, payload);
@@ -147,18 +149,27 @@ export default function CampaignsPage() {
             target_type: c.target_type || 'leads',
             target_criteria: criteria,
             scheduled_at: c.scheduled_at ? c.scheduled_at.split('T')[0] : '',
-            template_id: c.template_id || 0
+            template_id: c.template_id || 0,
+            smart_ai: c.smart_ai || false
         });
         setShowCampaignModal(true);
     };
 
     const openCreateCampaign = () => {
         setEditId(null);
-        setForm({ name: '', message_template: '', target_type: 'leads', target_criteria: 'all', scheduled_at: '', template_id: 0 });
+        setForm({ name: '', message_template: '', target_type: 'leads', target_criteria: 'all', scheduled_at: '', template_id: 0, smart_ai: false });
         setShowCampaignModal(true);
     };
 
-    const closeCampaignModal = () => { setShowCampaignModal(false); setEditId(null); };
+    const closeCampaignModal = () => {
+        setShowCampaignModal(false);
+        setEditId(null);
+        setForm({
+            name: '', message_template: '', target_type: 'leads',
+            target_criteria: 'all', scheduled_at: '', template_id: 0,
+            smart_ai: false
+        });
+    };
 
     const handleLaunch = async (id: number) => {
         try {
@@ -575,6 +586,28 @@ export default function CampaignsPage() {
                                     placeholder="Hello {name}..." value={form.message_template} onChange={e => setForm({ ...form, message_template: e.target.value })} />
                                 <VariablePicker onInsert={insertVarCampaign} />
                             </div>
+
+                            <div className="p-4 rounded-2xl bg-primary/5 border border-primary/20">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-lg ${form.smart_ai ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}>
+                                            <Zap className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-bold text-foreground">Smart AI Personalization</h4>
+                                            <p className="text-[10px] text-muted-foreground">Unique message for every recipient ✨</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setForm({ ...form, smart_ai: !form.smart_ai })}
+                                        className={`w-12 h-6 rounded-full relative transition-colors ${form.smart_ai ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+                                    >
+                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${form.smart_ai ? 'translate-x-6' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="flex justify-end gap-3 pt-2">
                                 <button type="button" onClick={closeCampaignModal} className="px-5 py-3 rounded-xl border border-border text-muted-foreground hover:text-foreground transition-all text-sm font-bold">Cancel</button>
                                 <button type="submit" className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-all text-sm">Save Campaign</button>

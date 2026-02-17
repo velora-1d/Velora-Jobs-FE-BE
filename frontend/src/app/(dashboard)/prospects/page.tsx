@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { api, fetcher, Prospect } from '@/lib/api';
 import {
     Loader2, Search, X, Phone, Building2, MapPin, Globe, Mail,
-    Plus, Edit, Trash2, ExternalLink, Star, Download
+    Plus, Edit, Trash2, ExternalLink, Star, Download, Wand2
 } from 'lucide-react';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Pagination } from '@/components/ui/Pagination';
@@ -38,6 +38,7 @@ function WAModal({ prospect, onClose, myName }: { prospect: Prospect; onClose: (
     const [selectedTemplate, setSelectedTemplate] = useState('pesantren');
     const [message, setMessage] = useState('');
     const [sending, setSending] = useState(false);
+    const [personalizing, setPersonalizing] = useState(false);
     const [sendResult, setSendResult] = useState<{ success: boolean; error?: string } | null>(null);
 
     useEffect(() => {
@@ -63,6 +64,19 @@ function WAModal({ prospect, onClose, myName }: { prospect: Prospect; onClose: (
         finally { setSending(false); }
     };
 
+    const handleAIPersonalize = async () => {
+        setPersonalizing(true);
+        try {
+            const res = await api.personalizeMessage(prospect);
+            setMessage(res.message);
+            // Also switch to a custom state to show AI result
+        } catch (err) {
+            alert('AI Personalization failed');
+        } finally {
+            setPersonalizing(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-card border border-border rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -71,10 +85,19 @@ function WAModal({ prospect, onClose, myName }: { prospect: Prospect; onClose: (
                     <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground hover:text-foreground" /></button>
                 </div>
                 <div className="p-6 border-b border-border">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 items-center">
                         {WA_TEMPLATES.map(tpl => (
                             <button key={tpl.id} onClick={() => setSelectedTemplate(tpl.id)} className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${selectedTemplate === tpl.id ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-500' : 'bg-muted/20 border-border text-muted-foreground'}`}>{tpl.label}</button>
                         ))}
+                        <div className="flex-1" />
+                        <button
+                            onClick={handleAIPersonalize}
+                            disabled={personalizing}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50"
+                        >
+                            {personalizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                            {personalizing ? 'Analyzing...' : 'Generate via AI ✨'}
+                        </button>
                     </div>
                 </div>
                 <div className="p-6">

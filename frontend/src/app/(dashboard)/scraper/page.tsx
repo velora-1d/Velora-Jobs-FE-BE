@@ -6,7 +6,7 @@ import {
     Play, Square, Terminal, Settings, Shield, AlertTriangle,
     Database, Globe, Search, Download, Trash2, Linkedin, ExternalLink, Briefcase, ClipboardList, Palmtree,
     MapPinned, Building2, School, ShoppingBag, Code2, Cpu, Zap, ChevronUp, ChevronDown, MapPin, CheckSquare,
-    FolderOpen, Share2, Target, Users
+    FolderOpen, Share2, Target, Users, Loader2
 } from 'lucide-react';
 
 // ─── Source Configuration ────────────────────────────────
@@ -227,283 +227,243 @@ export default function ScraperPage() {
     };
 
     return (
-        <div className="w-full">
-            <div className="mb-12">
+        <div className="w-full h-full flex flex-col">
+            <div className="mb-8">
                 <h1 className="text-4xl font-bold text-foreground tracking-tight flex items-center gap-3">
                     <Cpu className="w-8 h-8 text-blue-500 fill-blue-500/20" />
-                    Scraper Control
+                    Scraper Command Center
                 </h1>
-                <p className="text-muted-foreground mt-2 text-lg">Multi-source lead extraction for jobs & local business.</p>
+                <p className="text-muted-foreground mt-2 text-lg">Multi-source lead extraction with live monitoring.</p>
             </div>
 
-            {/* ─── Keyword Presets ─── */}
-            <div className="mb-8">
-                <button
-                    onClick={() => setShowPresets(!showPresets)}
-                    className="flex items-center gap-2 text-sm font-mono text-muted-foreground uppercase tracking-widest mb-4 hover:text-foreground transition-colors"
-                >
-                    <Zap className="w-4 h-4 text-amber-500" />
-                    Quick Presets
-                    {showPresets ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
+            <div className="flex flex-col lg:flex-row gap-8 flex-1 min-h-0">
+                {/* ─── LEFT COLUMN: CONTROLS ─── */}
+                <div className="flex-1 space-y-8 overflow-y-auto pr-2 custom-scrollbar">
 
-                {showPresets && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {PRESETS.map((preset) => {
-                            const PresetIcon = preset.Icon;
-                            return (
-                                <button
-                                    key={preset.id}
-                                    onClick={() => applyPreset(preset)}
-                                    className={`text-left p-5 rounded-2xl border transition-all hover:scale-[1.02] bg-gradient-to-br ${preset.color} ${activePreset === preset.id
-                                        ? 'ring-2 ring-primary/20 shadow-lg'
-                                        : 'hover:shadow-md'
-                                        }`}
-                                >
-                                    <p className="text-foreground font-bold text-sm mb-1 flex items-center gap-2">
-                                        <PresetIcon className="w-4 h-4 opacity-80" />
-                                        {preset.label}
-                                    </p>
-                                    <p className="text-muted-foreground text-xs leading-relaxed">{preset.desc}</p>
-                                    <div className="flex flex-wrap gap-1 mt-3">
-                                        {preset.variants.slice(0, 3).map((v) => (
-                                            <span key={v} className="text-[9px] px-2 py-0.5 rounded-full bg-black/10 dark:bg-black/30 text-muted-foreground dark:text-slate-300 font-mono">
-                                                {v}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+                    {/* Quick Presets */}
+                    <div className="space-y-4">
+                        <button
+                            onClick={() => setShowPresets(!showPresets)}
+                            className="flex items-center gap-2 text-xs font-mono text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors"
+                        >
+                            <Zap className="w-4 h-4 text-amber-500" />
+                            Quick Presets
+                            {showPresets ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
 
-            {/* ─── Main Form ─── */}
-            <div className="glass-panel bg-card border border-border rounded-3xl p-8 md:p-12 relative overflow-hidden">
-                <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-500/20 blur-3xl rounded-full pointer-events-none" />
-                <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-cyan-500/10 blur-3xl rounded-full pointer-events-none" />
-
-                <form onSubmit={handleScrape} className="space-y-8 relative z-10">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-3">
-                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Search className="w-3 h-3 text-blue-500" /> Target Keywords
-                            </label>
-                            <div className="relative group">
-                                <input
-                                    type="text"
-                                    value={keywords}
-                                    onChange={(e) => { setKeywords(e.target.value); setActivePreset(null); }}
-                                    className="w-full bg-input border border-border rounded-xl py-4 px-6 text-foreground focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-muted-foreground text-lg shadow-inner"
-                                    placeholder="e.g. Pesantren, Fullstack Developer"
-                                    required
-                                />
-                                <div className="absolute bottom-0 left-0 h-[2px] w-0 bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500 group-focus-within:w-full rounded-b-xl" />
-                            </div>
-                            {/* Keyword variant chips */}
-                            {activePreset && (
-                                <div className="flex flex-wrap gap-2 pt-2">
-                                    {PRESETS.find(p => p.id === activePreset)?.variants.map((v) => (
+                        {showPresets && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {PRESETS.map((preset) => {
+                                    const PresetIcon = preset.Icon;
+                                    return (
                                         <button
-                                            key={v}
-                                            type="button"
-                                            onClick={() => setKeywords(v)}
-                                            className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${keywords === v
-                                                ? 'bg-blue-500/20 border-blue-500/40 text-blue-500'
-                                                : 'bg-accent/50 border-border text-muted-foreground hover:text-foreground hover:border-foreground/20'
+                                            key={preset.id}
+                                            onClick={() => applyPreset(preset)}
+                                            className={`text-left p-4 rounded-2xl border transition-all hover:scale-[1.02] bg-gradient-to-br ${preset.color} ${activePreset === preset.id
+                                                ? 'ring-2 ring-primary/20 shadow-lg'
+                                                : 'hover:shadow-md'
                                                 }`}
                                         >
-                                            {v}
+                                            <p className="text-foreground font-bold text-sm mb-1 flex items-center gap-2">
+                                                <PresetIcon className="w-4 h-4 opacity-80" />
+                                                {preset.label}
+                                            </p>
+                                            <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{preset.desc}</p>
                                         </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="space-y-3">
-                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <MapPin className="w-3 h-3 text-cyan-500" /> Geographic Zone
-                            </label>
-                            <div className="relative group">
-                                <input
-                                    type="text"
-                                    value={location}
-                                    onChange={(e) => setLocation(e.target.value)}
-                                    className="w-full bg-input border border-border rounded-xl py-4 px-6 text-foreground focus:outline-none focus:border-cyan-500/50 transition-all placeholder:text-muted-foreground text-lg shadow-inner"
-                                    placeholder="e.g. Jawa Timur, Remote, Jakarta"
-                                />
-                                <div className="absolute bottom-0 left-0 h-[2px] w-0 bg-gradient-to-r from-cyan-500 to-emerald-500 transition-all duration-500 group-focus-within:w-full rounded-b-xl" />
+                                    );
+                                })}
                             </div>
-                        </div>
+                        )}
                     </div>
 
-                    {/* ─── Safety & Limit Controls ─── */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-3">
-                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Zap className="w-3 h-3 text-amber-500" /> Max Leads per Source
-                            </label>
-                            <div className="relative group">
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="50"
-                                    value={limit}
-                                    onChange={(e) => setLimit(parseInt(e.target.value))}
-                                    className="w-full bg-input border border-border rounded-xl py-4 px-6 text-foreground focus:outline-none focus:border-amber-500/50 transition-all placeholder:text-muted-foreground text-lg shadow-inner font-mono"
-                                    placeholder="10"
-                                />
-                                <div className="absolute bottom-0 left-0 h-[2px] w-0 bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500 group-focus-within:w-full rounded-b-xl" />
-                            </div>
-                            <p className="text-[10px] text-muted-foreground ml-1">Limit scraping to avoid detection (Recommended: 5-10)</p>
-                        </div>
+                    {/* Main Form */}
+                    <div className="glass-panel bg-card border border-border rounded-3xl p-8 relative overflow-hidden">
+                        <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-500/10 blur-3xl rounded-full pointer-events-none" />
 
-                        <div className="space-y-3">
-                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <CheckSquare className="w-3 h-3 text-emerald-500" /> Safe Mode
-                            </label>
-                            <div
-                                onClick={() => setSafeMode(!safeMode)}
-                                className={`
-                                    w-full h-[62px] rounded-xl border cursor-pointer transition-all px-4 flex items-center justify-between
-                                    ${safeMode
-                                        ? 'bg-emerald-500/10 border-emerald-500/50 text-foreground shadow-[0_0_15px_rgba(16,185,129,0.2)]'
-                                        : 'bg-input border-border text-muted-foreground hover:border-foreground/20'
-                                    }
-                                `}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-6 rounded-full relative transition-colors ${safeMode ? 'bg-emerald-500' : 'bg-muted-foreground'}`}>
-                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-background transition-transform ${safeMode ? 'translate-x-4' : 'translate-x-0'}`} />
+                        <form onSubmit={handleScrape} className="space-y-6 relative z-10">
+                            <div className="space-y-6">
+                                <div className="space-y-3">
+                                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
+                                        <Search className="w-3 h-3 text-blue-500" /> Target Keywords
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={keywords}
+                                        onChange={(e) => { setKeywords(e.target.value); setActivePreset(null); }}
+                                        className="w-full bg-input border border-border rounded-xl py-3 px-5 text-foreground focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-muted-foreground text-base shadow-inner"
+                                        placeholder="e.g. Pesantren, Clinic"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="space-y-3">
+                                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
+                                        <MapPin className="w-3 h-3 text-cyan-500" /> Geographic Zone
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={location}
+                                        onChange={(e) => setLocation(e.target.value)}
+                                        className="w-full bg-input border border-border rounded-xl py-3 px-5 text-foreground focus:outline-none focus:border-cyan-500/50 transition-all placeholder:text-muted-foreground text-base shadow-inner"
+                                        placeholder="e.g. Jawa Timur, Jakarta"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-3">
+                                        <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
+                                            <Zap className="w-3 h-3 text-amber-500" /> Limit
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={limit}
+                                            onChange={(e) => setLimit(parseInt(e.target.value))}
+                                            className="w-full bg-input border border-border rounded-xl py-3 px-5 text-foreground focus:outline-none focus:border-amber-500/50 transition-all font-mono text-base"
+                                        />
                                     </div>
-                                    <span className="font-semibold text-sm">Human Behavior Mode</span>
+                                    <div className="space-y-3">
+                                        <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
+                                            <Shield className="w-3 h-3 text-emerald-500" /> Safe Mode
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSafeMode(!safeMode)}
+                                            className={`w-full h-[50px] rounded-xl border transition-all flex items-center justify-center gap-2 ${safeMode ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500' : 'bg-input border-border text-muted-foreground'}`}
+                                        >
+                                            <CheckSquare className={`w-4 h-4 ${safeMode ? 'opacity-100' : 'opacity-20'}`} />
+                                            <span className="text-xs font-bold uppercase tracking-wider">{safeMode ? 'ON' : 'OFF'}</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                {safeMode && <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded">ACTIVE</span>}
-                            </div>
-                            <p className="text-[10px] text-muted-foreground ml-1">Adds random delays to mimic human interaction (Slower but safer)</p>
-                        </div>
-                    </div>
 
-                    {/* Source Selection */}
-                    <div className="space-y-3">
-                        <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
-                            <Globe className="w-3 h-3 text-emerald-500" /> Data Sources
-                        </label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                            {ALL_SOURCES.map((src) => {
-                                const isActive = selectedSources.includes(src.id);
-                                const SrcIcon = src.Icon;
-                                return (
+                                <div className="space-y-3">
+                                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
+                                        <Globe className="w-3 h-3 text-emerald-500" /> Sources
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {ALL_SOURCES.map((src) => {
+                                            const isActive = selectedSources.includes(src.id);
+                                            const SrcIcon = src.Icon;
+                                            return (
+                                                <button
+                                                    key={src.id}
+                                                    type="button"
+                                                    onClick={() => toggleSource(src.id)}
+                                                    className={`px-3 py-2 rounded-lg border transition-all text-[11px] font-bold flex items-center gap-2 ${isActive ? src.color : 'bg-accent/20 border-border text-muted-foreground'}`}
+                                                >
+                                                    <SrcIcon className="w-3.5 h-3.5" />
+                                                    {src.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-4">
+                                {loading ? (
                                     <button
-                                        key={src.id}
                                         type="button"
-                                        onClick={() => toggleSource(src.id)}
-                                        className={`flex flex-col items-start gap-1 px-4 py-3 rounded-xl border transition-all text-sm font-medium ${isActive
-                                            ? src.color + ' shadow-lg'
-                                            : 'bg-accent/20 border-border text-muted-foreground hover:text-foreground hover:border-foreground/20'
-                                            }`}
+                                        onClick={handleStop}
+                                        className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 bg-red-500 text-white shadow-lg shadow-red-500/20 hover:bg-red-600 transition-all font-mono tracking-widest text-sm"
                                     >
-                                        <div className="flex items-center gap-2 w-full">
-                                            {isActive ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-                                            <SrcIcon className="w-4 h-4" />
-                                            <span className="font-bold">{src.label}</span>
-                                        </div>
-                                        <span className={`text-[10px] ml-6 ${isActive ? 'opacity-70' : 'opacity-40'}`}>{src.desc}</span>
+                                        <Loader2 className="w-4 h-4 animate-spin" /> STOP SCRAPING
                                     </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Removed extra closing div */}
-
-                    <div className="pt-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div className="text-muted-foreground text-sm font-mono space-y-1">
-                            {selectedSources.includes('gmaps') && (
-                                <p className="text-red-400/70 text-xs flex items-center gap-1">
-                                    <MapPinned className="w-3 h-3" /> Google Maps mode: scrapes local businesses
-                                </p>
-                            )}
-                        </div>
-
-                        {loading ? (
-                            <button
-                                type="button"
-                                onClick={handleStop}
-                                className="px-8 py-4 rounded-xl font-bold flex items-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 transition-all font-mono tracking-widest text-sm"
-                            >
-                                <span className="relative flex h-3 w-3">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                                </span>
-                                STOP SCRAPING
-                            </button>
-                        ) : (
-                            <button
-                                type="submit"
-                                disabled={selectedSources.length === 0}
-                                className={`
-                    relative overflow-hidden group px-10 py-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all
-                    ${selectedSources.length === 0
-                                        ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
-                                        : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)] border border-blue-400/20'
-                                    }
-                  `}
-                            >
-                                <Play className="w-5 h-5 fill-current" />
-                                <span className="tracking-wide">INITIATE SCRAPE</span>
-                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
-                            </button>
-                        )}
-                    </div>
-                </form>
-
-                {/* ─── Live Log Terminal ─── */}
-                <div className="mt-10 bg-card border border-border rounded-2xl overflow-hidden shadow-2xl relative">
-                    <div className="flex items-center justify-between px-4 py-2 bg-muted/20 border-b border-border">
-                        <div className="flex gap-2">
-                            <div className="w-3 h-3 rounded-full bg-red-500/50" />
-                            <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
-                            <div className="w-3 h-3 rounded-full bg-green-500/50" />
-                        </div>
-                        <span className="text-xs font-mono text-muted-foreground">velora-scraper-console</span>
-                    </div>
-
-                    <div
-                        ref={logsEndRef}
-                        className="p-6 h-[300px] overflow-y-auto font-mono text-xs md:text-sm space-y-1 relative"
-                    >
-                        {logs.length === 0 && !loading && (
-                            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none">
-                                <span className="opacity-50">Waiting for scrape command...</span>
+                                ) : (
+                                    <button
+                                        type="submit"
+                                        disabled={selectedSources.length === 0}
+                                        className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 disabled:opacity-50 transition-all"
+                                    >
+                                        <Play className="w-5 h-5 fill-current" />
+                                        <span className="tracking-wide">INITIATE SCRAPE</span>
+                                    </button>
+                                )}
                             </div>
-                        )}
-
-                        {logs.map((log, i) => (
-                            <div key={i} className="text-slate-300 border-l-2 border-transparent pl-2 hover:border-slate-700 hover:bg-white/5 transition-colors">
-                                <span className="text-slate-500 mr-2">{log.substring(0, 10)}</span>
-                                <span className={
-                                    log.includes("ERROR") || log.includes("❌") ? "text-red-400" :
-                                        log.includes("SUCCESS") || log.includes("🎉") ? "text-emerald-400" :
-                                            log.includes("Starting") || log.includes("🚀") ? "text-blue-400" :
-                                                "text-primary"
-                                }>
-                                    {log.substring(11)}
-                                </span>
-                            </div>
-                        ))}
-
-                        {loading && (
-                            <div className="animate-pulse text-blue-400 flex items-center gap-2 mt-2">
-                                <span className="w-2 h-4 bg-blue-500 block animate-blink" />
-                                <span>_</span>
-                            </div>
-                        )}
+                        </form>
                     </div>
                 </div>
 
+                {/* ─── RIGHT COLUMN: LIVE MONITOR ─── */}
+                <div className="w-full lg:w-[450px] flex flex-col min-h-[400px]">
+                    <div className="sticky top-4 flex flex-col h-full max-h-[calc(100vh-180px)]">
+                        <div className="flex items-center justify-between mb-3 px-1">
+                            <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                                <Terminal className="w-4 h-4 text-blue-500" /> Live Monitor
+                            </h3>
+                            {loading && (
+                                <div className="flex items-center gap-2">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                    </span>
+                                    <span className="text-[10px] font-mono text-emerald-500 animate-pulse">SCRAPING...</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex-1 bg-black border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+                            <div className="flex items-center justify-between px-4 py-2 bg-slate-900/50 border-b border-white/5">
+                                <div className="flex gap-1.5">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/30" />
+                                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/30" />
+                                    <div className="w-2.5 h-2.5 rounded-full bg-green-500/30" />
+                                </div>
+                                <span className="text-[10px] font-mono text-slate-500 tracking-wider">velora-scraper-v2.0</span>
+                            </div>
+
+                            <div
+                                ref={logsEndRef}
+                                className="p-5 overflow-y-auto font-mono text-[11px] leading-relaxed space-y-1 bg-[#0a0a0b] flex-1 custom-terminal"
+                            >
+                                {logs.length === 0 && !loading && (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-700 opacity-40 text-center px-4">
+                                        <Terminal className="w-8 h-8 mb-2" />
+                                        <p>Ready to monitor...</p>
+                                        <p className="text-[9px] mt-1">Logs will appear here in real-time</p>
+                                    </div>
+                                )}
+
+                                {logs.map((log, i) => {
+                                    const time = log.substring(0, 10);
+                                    const msg = log.substring(11);
+                                    let color = "text-slate-400";
+                                    if (msg.includes("ERROR") || msg.includes("❌")) color = "text-red-400";
+                                    else if (msg.includes("SUCCESS") || msg.includes("🎉") || msg.includes("DONE")) color = "text-emerald-400";
+                                    else if (msg.includes("Starting") || msg.includes("🚀") || msg.includes("Extracting")) color = "text-blue-400";
+                                    else if (msg.includes("Found")) color = "text-amber-400";
+
+                                    return (
+                                        <div key={i} className="group flex gap-3 border-l-2 border-transparent pl-1 hover:bg-white/5 transition-colors">
+                                            <span className="text-slate-600 flex-shrink-0">{time}</span>
+                                            <span className={color}>{msg}</span>
+                                        </div>
+                                    );
+                                })}
+
+                                {loading && (
+                                    <div className="text-blue-400 flex items-center gap-2 pt-2">
+                                        <span className="w-1.5 h-3 bg-blue-500 animate-pulse" />
+                                        <span className="animate-pulse">_</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            <style jsx global>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.1); }
+                
+                .custom-terminal::-webkit-scrollbar { width: 6px; }
+                .custom-terminal::-webkit-scrollbar-track { background: #0a0a0b; }
+                .custom-terminal::-webkit-scrollbar-thumb { background: #1e1e24; border-radius: 3px; }
+                .custom-terminal::-webkit-scrollbar-thumb:hover { background: #2d2d35; }
+            `}</style>
         </div>
     );
 }

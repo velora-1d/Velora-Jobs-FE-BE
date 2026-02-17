@@ -131,6 +131,7 @@ export interface Campaign {
     sent_count?: number;
     failed_count?: number;
     scheduled_at?: string;
+    smart_ai?: boolean;
     created_at?: string;
 }
 
@@ -424,6 +425,13 @@ export const api = {
         return authFetch(`${API_URL}/api/campaigns/generate-template?${params.toString()}`, { method: 'POST' });
     },
 
+    async personalizeMessage(recipientData: any): Promise<{ message: string }> {
+        return authFetch(`${API_URL}/api/ai/personalize`, {
+            method: 'POST',
+            body: JSON.stringify(recipientData)
+        });
+    },
+
     // ─── Export (CSV) ───
     async exportCSV(type: 'leads' | 'projects' | 'invoices') {
         const token = localStorage.getItem('token');
@@ -438,5 +446,12 @@ export const api = {
         a.download = `${type}_export.csv`;
         a.click();
         window.URL.revokeObjectURL(url);
+    },
+
+    async generateAiProposal(payload: any): Promise<{ summary: string; offerings: string[]; pricing_strategy: string }> {
+        return authFetch(`${API_URL}/api/ai/proposal`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
     },
 };

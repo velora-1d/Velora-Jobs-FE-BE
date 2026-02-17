@@ -96,7 +96,7 @@ class CampaignRunner:
                 
                 # In real production, this would call Fonnte/WAbot API
                 # For Phase 23, we use the real Fonnte integration
-                success = await self._send_via_fonnte(lead, campaign.message_template)
+                success = await self._send_via_fonnte(lead, campaign.message_template, smart_ai=campaign.smart_ai)
                 
                 if success:
                     self.status["sent"] += 1
@@ -140,19 +140,36 @@ class CampaignRunner:
             self.is_running = False
             self.status["state"] = "idle"
 
-    async def _send_via_fonnte(self, lead: Lead, template: str):
+    async def _send_via_fonnte(self, lead: Lead, template: str, smart_ai: bool = False):
         """
         Send a real message via Fonnte API.
+        If smart_ai=True, generate a unique message for this recipient.
         """
+        import os
         token = os.getenv("FONNTE_TOKEN")
         if not token:
             self._log("❌ FONNTE_TOKEN not found in environment.")
             return False
 
         try:
-            # Replace variables
-            message = template.replace("{name}", lead.title or "Partner") \
-                              .replace("{company}", lead.company or "")
+            message = ""
+            if smart_ai:
+                from ai_scorer import generate_personalized_message
+                # Convert lead to dict for the AI function
+                lead_data = {
+                    "name": lead.title,
+                    "company": lead.company,
+                    "category": getattr(lead, 'category', ''),
+                    "address": getattr(lead, 'location', ''),
+                    "has_website": getattr(lead, 'has_website', True),
+                    "phone": lead.phone
+                }
+                self._log(f"🧠 AI is crafting a unique message for {lead.company or lead.title}...")
+                message = await generate_personalized_message(lead_data)
+            else:
+                # Standard template replacement
+                message = template.replace("{name}", lead.title or "Partner") \
+                                  .replace("{company}", lead.company or "")
             
             self._log(f"📤 Sending to {lead.phone or 'No Phone'} ({lead.company})...")
             
@@ -172,7 +189,7 @@ class CampaignRunner:
                         "message": message,
                         "countryCode": "62", # Default to ID
                     },
-                    timeout=10.0
+                    timeout=20.0 # Increase timeout for AI lag potentially
                 )
                 
                 res_data = response.json()

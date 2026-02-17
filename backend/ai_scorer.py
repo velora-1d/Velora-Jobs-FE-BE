@@ -226,6 +226,108 @@ Langsung tulis template-nya tanpa penjelasan tambahan."""
         return "Halo {name} dari {company},\n\nKami dari Velora Jobs ingin membantu meningkatkan efisiensi operasional Anda.\n\nTertarik diskusi lebih lanjut?"
 
 
+async def generate_personalized_message(recipient_data: dict, tone: str = "professional") -> str:
+    """
+    Generate highly personalized WhatsApp message using GLM-4.
+    Analyzes specific business context like website status and rating.
+    """
+    biz_name = recipient_data.get("name") or recipient_data.get("title") or "{name}"
+    biz_company = recipient_data.get("company") or "{company}"
+    has_website = recipient_data.get("has_website", True)
+    category = recipient_data.get("category", "")
+    address = recipient_data.get("address", "")
+    rating = recipient_data.get("rating")
+    
+    # Context hooks
+    hook = ""
+    if not has_website:
+        hook = "Saya perhatikan bisnis Anda belum memiliki website resmi di Google Maps. Ini adalah peluang besar untuk meningkatkan kredibilitas digital."
+    elif rating and rating < 4.0:
+        hook = f"Saya melihat rating bisnis Anda di Google Maps ({rating}/5). Kami bisa bantu kelola reputasi digital agar lebih banyak pelanggan percaya."
+    
+    prompt = f"""Kamu adalah Sales Specialist di Velora Jobs.
+Tugas: Buat pesan pembuka WhatsApp yang sangat personal dan ramah.
+
+Detail Bisnis:
+- Nama: {biz_name}
+- Perusahaan: {biz_company}
+- Kategori: {category}
+- Lokasi: {address}
+- Punya Website: {"Ya" if has_website else "Tidak"}
+- Rating: {rating if rating else "N/A"}
+
+Konteks Tambahan: {hook}
+
+Syarat:
+1. Awali dengan salam yang hangat (Assalamu'alaikum/Halo)
+2. Sebutkan detail spesifik (nama bisnis/lokasi) agar tidak terlihat seperti spam
+3. Jelaskan singkat bagaimana Velora Jobs bisa membantu (fokus pada solusi)
+4. Bahasa Indonesia yang natural, sopan, dan persuasif
+5. Maksimal 3-4 paragraf pendek
+6. Gunakan placeholder {{name}} dan {{company}} jika ingin tetap bisa diedit manual
+
+Langsung tulis pesannya saja."""
+
+    result = await call_ai(prompt, model="glm-4", temperature=0.7, max_tokens=500)
+    
+    if result["success"]:
+        return result["content"]
+    else:
+        return f"Halo {biz_name},\n\nSaya dari Velora Jobs perhatikan bisnis Anda di {address}. Kami ingin menawarkan solusi digital untuk meningkatkan efisiensi operasional Anda.\n\nApakah ada waktu untuk diskusi singkat?"
+
+
+async def generate_proposal_content(lead_data: dict) -> dict:
+    """
+    Generate professional proposal sections using GLM-4.
+    Returns: {"summary": str, "offerings": list, "pricing_strategy": str}
+    """
+    title = lead_data.get("title", lead_data.get("name", "Potential Client"))
+    company = lead_data.get("company", "Your Company")
+    description = lead_data.get("description", "")
+    has_website = lead_data.get("has_website", True)
+
+    prompt = f"""Kamu adalah Business Consultant di Velora Jobs.
+Tugas: Buat draf proposal profesional untuk calon klien berikut.
+
+Klien: {title} @ {company}
+Detail Kebutuhan/Konteks: {description}
+Status Website: {"Sudah punya website" if has_website else "Belum punya website"}
+
+Velora Jobs menawarkan:
+1. Web Development Pro (React/Next.js) - Fokus estetika premium & SEO.
+2. Sistem Manajemen (Sekolah/Pesantren) - Fokus efisiensi & database.
+
+Buat konten dalam Bahasa Indonesia dengan format JSON:
+{{
+  "summary": "1 paragraf ringkasan eksekutif yang persuasif.",
+  "offerings": ["3-4 poin layanan yang paling relevan untuk klien ini"],
+  "pricing_strategy": "Saran strategi harga (Entry/Mid/Premium) dalam 1 kalimat."
+}}
+
+Respond ONLY with valid JSON."""
+
+    result = await call_ai(prompt, model="glm-4", temperature=0.5, max_tokens=1000)
+    
+    if result["success"]:
+        try:
+            content = result["content"]
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            return json.loads(content)
+        except:
+            pass
+
+    return {
+        "summary": f"Kami ingin menawarkan solusi digital terbaik untuk meningkatkan skalabilitas {company}.",
+        "offerings": [
+            "Pembuatan Website Profesional",
+            "Sistem Manajemen Berbasis Cloud",
+            "Optimasi Search Engine (SEO)"
+        ],
+        "pricing_strategy": "Strategi harga fleksibel berdasarkan skala implementasi."
+    }
+
+
 def keyword_score(
     title: str, description: str, has_website: bool = True, category: str = ""
 ) -> dict:

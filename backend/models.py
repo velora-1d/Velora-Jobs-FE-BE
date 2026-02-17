@@ -109,6 +109,7 @@ class Campaign(Base):
     target_criteria = Column(Text, nullable=True)  # JSON string
     target_type = Column(String, default="leads")  # "leads" or "prospects"
     template_id = Column(Integer, nullable=True)   # FK to promotion_templates (optional)
+    smart_ai = Column(Boolean, default=False)       # If True, generate unique message for each lead
     sent_count = Column(Integer, default=0)
     failed_count = Column(Integer, default=0)
     scheduled_at = Column(DateTime, nullable=True)

@@ -1382,6 +1382,60 @@ async def generate_template(
     return {"template": template, "category": target_category, "service": service_type}
 
 
+@app.post("/api/ai/personalize")
+async def personalize_message(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from models import ActivityLog
+    from ai_scorer import generate_personalized_message
+    from datetime import datetime
+    import json
+    
+    # payload should contain prospect/lead data
+    message = await generate_personalized_message(payload)
+    
+    # Log this activity
+    log = ActivityLog(
+        category="ai_personalization",
+        level="info",
+        message=f"Personalized message generated for {payload.get('name', 'Unknown')}",
+        details=json.dumps({"model": "glm-4", "biz": payload.get('name')}),
+        created_at=datetime.now()
+    )
+    db.add(log)
+    db.commit()
+    
+    return {"message": message}
+@app.post("/api/ai/proposal")
+async def generate_proposal_ai(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from models import ActivityLog
+    from ai_scorer import generate_proposal_content
+    from datetime import datetime
+    import json
+    
+    # payload should contain lead/prospect data
+    proposal = await generate_proposal_content(payload)
+    
+    # Log this activity
+    log = ActivityLog(
+        category="ai_proposal",
+        level="info",
+        message=f"AI Proposal generated for {payload.get('company', 'Unknown')}",
+        details=json.dumps({"model": "glm-4", "biz": payload.get('company')}),
+        created_at=datetime.now()
+    )
+    db.add(log)
+    db.commit()
+    
+    return proposal
+
+
 # --- Telegram ---
 
 @app.post("/api/telegram/test")
@@ -1481,7 +1535,8 @@ async def create_campaign(payload: dict, db: Session = Depends(get_db), current_
         status="draft",
         message_template=payload.get("message_template", ""),
         target_criteria=payload.get("target_criteria", "{}"),
-        scheduled_at=scheduled_at
+        scheduled_at=scheduled_at,
+        smart_ai=payload.get("smart_ai", False)
     )
     db.add(camp)
     db.commit()
@@ -1502,6 +1557,7 @@ async def update_campaign(camp_id: int, payload: dict, db: Session = Depends(get
     if "status" in payload: camp.status = payload["status"]
     if "message_template" in payload: camp.message_template = payload["message_template"]
     if "target_criteria" in payload: camp.target_criteria = payload["target_criteria"]
+    if "smart_ai" in payload: camp.smart_ai = payload["smart_ai"]
     if "scheduled_at" in payload:
         try:
             camp.scheduled_at = datetime.fromisoformat(payload["scheduled_at"]) if payload["scheduled_at"] else None
