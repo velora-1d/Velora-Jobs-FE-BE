@@ -226,10 +226,59 @@ Langsung tulis template-nya tanpa penjelasan tambahan."""
         return "Halo {name} dari {company},\n\nKami dari Velora Jobs ingin membantu meningkatkan efisiensi operasional Anda.\n\nTertarik diskusi lebih lanjut?"
 
 
+def _detect_recipient_type(category: str, company: str, name: str) -> str:
+    """
+    Detect recipient type from category/company/name keywords.
+    Returns: 'islamic', 'school', or 'business'
+    """
+    text = f"{category} {company} {name}".lower()
+
+    islamic_keywords = [
+        "pesantren", "pondok", "madrasah", "tahfidz", "tahfiz",
+        "islamic", "islami", "masjid", "musholla", "quran",
+        "al-", "al ", "darul", "darus", "baitul", "nurul",
+        "yayasan islam", "tpa", "tpq", "mts", "mtsn", "man ",
+    ]
+    school_keywords = [
+        "sekolah", "sma ", "smk ", "smp ", "sd ", "tk ",
+        "sman", "smkn", "smpn", "sdn", "akademi", "universitas",
+        "politeknik", "kampus", "lembaga pendidikan", "bimbel",
+        "kursus", "les ", "pendidikan", "paud",
+    ]
+
+    for kw in islamic_keywords:
+        if kw in text:
+            return "islamic"
+    for kw in school_keywords:
+        if kw in text:
+            return "school"
+    return "business"
+
+
+def _get_time_greeting() -> str:
+    """
+    Get time-appropriate greeting based on WIB (UTC+7).
+    """
+    from datetime import datetime, timezone, timedelta
+    wib = timezone(timedelta(hours=7))
+    hour = datetime.now(wib).hour
+
+    if 5 <= hour < 11:
+        return "Selamat Pagi"
+    elif 11 <= hour < 15:
+        return "Selamat Siang"
+    elif 15 <= hour < 18:
+        return "Selamat Sore"
+    else:
+        return "Selamat Malam"
+
+
 async def generate_personalized_message(recipient_data: dict, tone: str = "professional") -> str:
     """
     Generate highly personalized WhatsApp message using GLM-4.
-    Analyzes specific business context like website status and rating.
+    Context-aware: adapts greeting, problem, and solution based on
+    recipient type (Islamic/School/Business) and time of day.
+    Uses SPPSD flow: Salam → Perkenalan → Problem → Solusi → Diskusi.
     """
     biz_name = recipient_data.get("name") or recipient_data.get("title") or "{name}"
     biz_company = recipient_data.get("company") or "{company}"
@@ -237,43 +286,153 @@ async def generate_personalized_message(recipient_data: dict, tone: str = "profe
     category = recipient_data.get("category", "")
     address = recipient_data.get("address", "")
     rating = recipient_data.get("rating")
-    
-    # Context hooks
-    hook = ""
-    if not has_website:
-        hook = "Saya perhatikan bisnis Anda belum memiliki website resmi di Google Maps. Ini adalah peluang besar untuk meningkatkan kredibilitas digital."
-    elif rating and rating < 4.0:
-        hook = f"Saya melihat rating bisnis Anda di Google Maps ({rating}/5). Kami bisa bantu kelola reputasi digital agar lebih banyak pelanggan percaya."
-    
-    prompt = f"""Kamu adalah Sales Specialist di Velora Jobs.
-Tugas: Buat pesan pembuka WhatsApp yang sangat personal dan ramah.
 
-Detail Bisnis:
-- Nama: {biz_name}
-- Perusahaan: {biz_company}
-- Kategori: {category}
-- Lokasi: {address}
+    # ── 1. Detect recipient type ──
+    rtype = _detect_recipient_type(category, biz_company, biz_name)
+    time_greeting = _get_time_greeting()
+
+    # ── 2. Build contextual greeting ──
+    if rtype == "islamic":
+        greeting_instruction = (
+            "Gunakan salam Islami: 'Assalamu'alaikum Warahmatullahi Wabarakatuh' "
+            "karena penerima adalah lembaga pesantren/islami."
+        )
+        sapaan = "Ustadz/Ustadzah"
+    elif rtype == "school":
+        greeting_instruction = (
+            f"Gunakan salam formal: '{time_greeting}, Bapak/Ibu' "
+            "karena penerima adalah lembaga pendidikan umum."
+        )
+        sapaan = "Bapak/Ibu"
+    else:
+        greeting_instruction = (
+            f"Gunakan salam bisnis: '{time_greeting}, Bapak/Ibu' "
+            "karena penerima adalah pelaku usaha/UMKM."
+        )
+        sapaan = "Bapak/Ibu"
+
+    # ── 3. Build problem hook ──
+    if rtype == "islamic":
+        if not has_website:
+            problem_hook = (
+                "Saat ini banyak wali santri mencari informasi pesantren secara online. "
+                "Tanpa website resmi, calon santri potensial bisa terlewat."
+            )
+        else:
+            problem_hook = (
+                "Administrasi pesantren yang masih manual — data santri, pembayaran SPP, "
+                "absensi — menghabiskan waktu yang seharusnya bisa untuk kegiatan ta'lim."
+            )
+        solution_hook = (
+            "Kami di Velora Jobs menyediakan Sistem Manajemen Pesantren yang mencakup "
+            "website resmi, database santri, pembayaran digital, dan laporan otomatis."
+        )
+    elif rtype == "school":
+        if not has_website:
+            problem_hook = (
+                "Di era digital, orang tua mencari informasi sekolah lewat internet. "
+                "Tanpa website profesional, sekolah kehilangan kesempatan menarik siswa baru."
+            )
+        else:
+            problem_hook = (
+                "Administrasi manual — raport, absensi, data siswa — sering memakan "
+                "waktu guru yang seharusnya bisa fokus mengajar."
+            )
+        solution_hook = (
+            "Kami di Velora Jobs menyediakan Sistem Manajemen Sekolah lengkap — "
+            "website resmi, e-Raport, database siswa, dan dashboard administrasi."
+        )
+    else:
+        if not has_website:
+            problem_hook = (
+                "Saya perhatikan bisnis Anda belum memiliki website resmi. "
+                "Padahal 87% konsumen memeriksa kehadiran online sebelum memutuskan membeli."
+            )
+        elif rating and float(rating) < 4.0:
+            problem_hook = (
+                f"Saya melihat rating Google Maps bisnis Anda saat ini {rating}/5. "
+                "Dengan strategi reputasi digital yang tepat, rating ini bisa meningkat signifikan."
+            )
+        else:
+            problem_hook = (
+                "Banyak pelanggan potensial di sekitar lokasi Anda yang mungkin "
+                "belum mengetahui produk/jasa yang ditawarkan secara online."
+            )
+        solution_hook = (
+            "Kami di Velora Jobs menyediakan solusi digital lengkap — "
+            "website profesional, optimasi Google Maps & SEO, serta sistem CRM "
+            "untuk meningkatkan penjualan dan efisiensi operasional."
+        )
+
+    # ── 4. Build AI prompt with SPPSD structure ──
+    prompt = f"""Kamu adalah Sales Specialist senior di Velora Jobs.
+Tugas: Buat pesan pembuka WhatsApp yang SANGAT personal, sopan, dan persuasif.
+
+═══ DATA PENERIMA ═══
+- Nama kontak: {biz_name}
+- Instansi/Perusahaan: {biz_company}
+- Kategori: {category or "Umum"}
+- Lokasi: {address or "Indonesia"}
+- Tipe penerima: {"Pesantren/Lembaga Islami" if rtype == "islamic" else "Sekolah/Pendidikan" if rtype == "school" else "UMKM/Bisnis"}
 - Punya Website: {"Ya" if has_website else "Tidak"}
-- Rating: {rating if rating else "N/A"}
+- Rating Google: {rating if rating else "N/A"}
 
-Konteks Tambahan: {hook}
+═══ INSTRUKSI SALAM ═══
+{greeting_instruction}
 
-Syarat:
-1. Awali dengan salam yang hangat (Assalamu'alaikum/Halo)
-2. Sebutkan detail spesifik (nama bisnis/lokasi) agar tidak terlihat seperti spam
-3. Jelaskan singkat bagaimana Velora Jobs bisa membantu (fokus pada solusi)
-4. Bahasa Indonesia yang natural, sopan, dan persuasif
-5. Maksimal 3-4 paragraf pendek
-6. Gunakan placeholder {{name}} dan {{company}} jika ingin tetap bisa diedit manual
+═══ STRUKTUR PESAN (WAJIB IKUTI URUTAN INI) ═══
 
-Langsung tulis pesannya saja."""
+1. **SALAM** — {greeting_instruction}
+2. **PERKENALAN** — "Perkenalkan, saya dari tim Velora Jobs..."
+   - Sebutkan bahwa kita specialist di bidang yang relevan
+3. **PROBLEM** — Sampaikan masalah ini dengan empati:
+   "{problem_hook}"
+   - Jangan terkesan menggurui, tapi tunjukkan kepedulian
+4. **SOLUSI** — Tawarkan solusi ini secara ringkas:
+   "{solution_hook}"
+   - Fokus pada manfaat, bukan fitur teknis
+5. **DISKUSI (CTA)** — Ajak diskusi ringan:
+   "Apakah {sapaan} bersedia meluangkan waktu 10 menit untuk diskusi singkat?"
 
-    result = await call_ai(prompt, model="glm-4", temperature=0.7, max_tokens=500)
-    
+═══ ATURAN PENULISAN ═══
+- Bahasa Indonesia yang natural, sopan, dan persuasif
+- Gunakan sapaan "{sapaan}" untuk menyapa
+- Sebutkan nama instansi/perusahaan agar tidak terlihat spam
+- Maksimal 5 paragraf pendek (sesuai struktur di atas)
+- Jangan pakai emoji berlebihan, maksimal 1-2 emoji relevan
+- Tone: {"formal & penuh ta'dzim/hormat" if rtype == "islamic" else "formal & profesional" if rtype == "school" else "semi-formal, friendly tapi sopan"}
+
+Langsung tulis pesannya saja tanpa penjelasan tambahan."""
+
+    result = await call_ai(prompt, model="glm-4", temperature=0.7, max_tokens=600)
+
     if result["success"]:
         return result["content"]
+
+    # ── Fallback: structured message without AI ──
+    if rtype == "islamic":
+        salam = "Assalamu'alaikum Warahmatullahi Wabarakatuh"
     else:
-        return f"Halo {biz_name},\n\nSaya dari Velora Jobs perhatikan bisnis Anda di {address}. Kami ingin menawarkan solusi digital untuk meningkatkan efisiensi operasional Anda.\n\nApakah ada waktu untuk diskusi singkat?"
+        salam = f"{time_greeting}, {sapaan}"
+
+    return (
+        f"{salam}\n\n"
+        f"Perkenalkan, saya dari tim Velora Jobs. "
+        f"Kami adalah specialist di bidang solusi digital untuk "
+        f"{'lembaga pendidikan Islam' if rtype == 'islamic' else 'lembaga pendidikan' if rtype == 'school' else 'pelaku usaha'}.\n\n"
+        f"{problem_hook}\n\n"
+        f"{solution_hook}\n\n"
+        f"Apakah {sapaan} bersedia meluangkan waktu 10 menit untuk diskusi singkat? "
+        f"Jazakallahu khairan 🙏" if rtype == "islamic" else
+        f"{salam}\n\n"
+        f"Perkenalkan, saya dari tim Velora Jobs. "
+        f"Kami adalah specialist di bidang solusi digital untuk "
+        f"{'lembaga pendidikan' if rtype == 'school' else 'pelaku usaha'}.\n\n"
+        f"{problem_hook}\n\n"
+        f"{solution_hook}\n\n"
+        f"Apakah {sapaan} bersedia meluangkan waktu 10 menit untuk diskusi singkat? "
+        f"Terima kasih atas waktunya 🙏"
+    )
 
 
 async def generate_proposal_content(lead_data: dict) -> dict:
