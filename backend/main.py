@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Re
 from fastapi.middleware.cors import CORSMiddleware
 from database import init_db, get_db, SessionLocal
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_, func, desc
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import timedelta
 import asyncio
@@ -355,6 +356,12 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
 async def get_leads(
     start_date: str = None,
     end_date: str = None,
+    source: str = None,
+    status: str = None,
+    min_score: int = None,
+    max_score: int = None,
+    wa_status: str = None, # 'contacted', 'not_contacted'
+    search: str = None,
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
@@ -380,6 +387,32 @@ async def get_leads(
             query = query.filter(Lead.created_at <= end_dt)
         except ValueError:
             pass
+
+    if source and source != 'all':
+        query = query.filter(Lead.source == source)
+    
+    if status and status != 'all':
+        query = query.filter(Lead.status == status)
+
+    if min_score is not None:
+        query = query.filter(Lead.match_score >= min_score)
+    
+    if max_score is not None:
+        query = query.filter(Lead.match_score <= max_score)
+
+    if wa_status:
+        if wa_status == 'contacted':
+            query = query.filter(Lead.wa_contacted_at.isnot(None))
+        elif wa_status == 'not_contacted':
+            query = query.filter(Lead.wa_contacted_at.is_(None))
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(or_(
+            Lead.title.ilike(search_term),
+            Lead.company.ilike(search_term),
+            Lead.location.ilike(search_term)
+        ))
 
     return query.order_by(Lead.id.desc()).all()
 
@@ -567,10 +600,13 @@ async def get_prospects(
     end_date: str = None, 
     category: str = None,
     status: str = None,
+    min_score: int = None,
+    wa_status: str = None,
+    search: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from datetime import datetime
+    from datetime import datetime, time
     query = db.query(Prospect)
     
     if start_date:
@@ -581,6 +617,23 @@ async def get_prospects(
         query = query.filter(Prospect.category.ilike(f"%{category}%"))
     if status and status != "all":
         query = query.filter(Prospect.status == status)
+
+    if min_score is not None:
+        query = query.filter(Prospect.match_score >= min_score)
+
+    if wa_status:
+        if wa_status == 'contacted':
+            query = query.filter(Prospect.wa_contacted_at.isnot(None))
+        elif wa_status == 'not_contacted':
+            query = query.filter(Prospect.wa_contacted_at.is_(None))
+            
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(or_(
+            Prospect.name.ilike(search_term),
+            Prospect.category.ilike(search_term),
+            Prospect.address.ilike(search_term)
+        ))
     
     return query.order_by(Prospect.created_at.desc()).all()
 
@@ -871,15 +924,40 @@ async def send_whatsapp(payload: schemas.WhatsAppSend, db: Session = Depends(get
 # ═══════════════════════════════════════════════════
 
 @app.get("/api/followups", response_model=List[schemas.FollowUpResponse])
-async def get_followups(lead_id: int = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_followups(
+    lead_id: int = None, 
+    start_date: str = None,
+    end_date: str = None,
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     from models import FollowUp, Lead, Prospect
     from sqlalchemy.orm import joinedload
+    from datetime import datetime, time
     
-    query = db.query(FollowUp).options(joinedload(FollowUp.lead), joinedload(FollowUp.prospect)).order_by(FollowUp.created_at.desc())
+    query = db.query(FollowUp).options(joinedload(FollowUp.lead), joinedload(FollowUp.prospect))
     
     if lead_id:
         query = query.filter(FollowUp.lead_id == lead_id)
-    prospect_id_filter = None  # Could add query param later
+
+    if start_date and end_date:
+        try:
+            # Filter by next_follow_date
+            # Assuming format YYYY-MM-DD
+            start_dt = datetime.fromisoformat(start_date).date()
+            end_dt = datetime.fromisoformat(end_date).date()
+            query = query.filter(FollowUp.next_follow_date >= start_dt, FollowUp.next_follow_date <= end_dt)
+        except ValueError:
+            pass
+            
+    # Default order: Priority to upcoming tasks
+    if start_date:
+        # If filtering by date, show earliest first (Agenda view)
+        query = query.order_by(FollowUp.next_follow_date.asc())
+    else:
+        # Default view: catch-all, newest created first
+        query = query.order_by(FollowUp.created_at.desc())
+
     follow_ups = query.all()
     
     # Map to schema (Pydantic orm_mode handles most, but we need flattened fields)

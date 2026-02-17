@@ -6,13 +6,119 @@ import { api, fetcher, FollowUp, Project, Invoice, InvoiceItem, Lead } from '@/l
 import {
     Plus, Edit, Trash2, Clock, Briefcase, FileText, Download,
     Calendar, DollarSign, Phone as PhoneIcon, Mail, Users, Search,
-    Loader2, CheckCircle2, ChevronDown, Building2
+    Loader2, CheckCircle2, ChevronDown, Building2, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Pagination } from '@/components/ui/Pagination';
 import { StatusBadge } from '@/components/shared/Badges';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
+import { Wand2 } from 'lucide-react'; // Added Wand2 import
+
+// ─── WA Message Templates ────────────────────────
+const WA_TEMPLATES = [
+    {
+        id: 'pesantren', label: 'Pesantren',
+        message: `Assalamualaikum Wr. Wb.\n\nPerkenalkan saya {{nama_saya}}, seorang web developer profesional. Saya menemukan info {{nama_target}} dan ingin menawarkan jasa pembuatan website resmi yang mencakup:\n✅ Profil lembaga & visi misi\n✅ Pendaftaran online (PPDB)\n✅ Galeri & Berita\n✅ Informasi Kurikulum\n\nApakah berkenan untuk diskusi lebih lanjut? 🙏`,
+    },
+    {
+        id: 'sekolah', label: 'Sekolah',
+        message: `Assalamualaikum/Selamat siang,\n\nPerkenalkan saya {{nama_saya}}, fullstack developer. Saya melihat {{nama_target}} belum memiliki website resmi.\n\nWebsite sekolah sangat penting untuk:\n✅ Informasi PPDB online\n✅ Profil & Prestasi\n✅ Sarana informasi wali murid\n\nSaya bisa buatkan website profesional dengan harga terjangkau. Boleh saya jelaskan paketnya?`,
+    },
+    {
+        id: 'umkm', label: 'UMKM',
+        message: `Halo Kak, selamat siang 👋\n\nPerkenalkan saya {{nama_saya}}, web developer. Saya tertarik membantu {{nama_target}} untuk Go Digital dengan website bisnis profesional.\n\nManfaat website:\n🚀 Lebih mudah ditemukan di Google\n📱 Katalog produk online\n📊 Meningkatkan kepercayaan customer\n\nSaya punya penawaran spesial minggu ini. Apakah boleh saya kirimkan proposalnya? 😊`,
+    },
+    {
+        id: 'general', label: 'Umum',
+        message: `Halo, selamat siang 👋\n\nPerkenalkan saya {{nama_saya}}, dari Velora Web Dev.\n\nKami membantu bisnis seperti {{nama_target}} untuk memiliki website profesional yang cepat dan modern.\n\nApakah Bapak/Ibu sedang berencana membuat atau memperbarui website? Terima kasih.`,
+    },
+    {
+        id: 'followup', label: 'Follow Up',
+        message: `Halo Kak/Bapak/Ibu, selamat siang 👋\n\nSaya {{nama_saya}} yang kemarin menghubungi terkait jasa pembuatan website untuk {{nama_target}}.\n\nApakah sudah ada update atau keputusan terkait penawaran kami? Jika ada pertanyaan, silakan ditanyakan ya. Terima kasih. 🙏`,
+    },
+];
+
+// ─── WA Outreach Modal ────────────────────────
+function WAModal({ target, onClose, onSuccess, myName }: { target: { name: string; phone: string; id?: number; type: 'lead' | 'prospect' }; onClose: () => void; onSuccess: () => void; myName: string }) {
+    const [selectedTemplate, setSelectedTemplate] = useState('pesantren');
+    const [message, setMessage] = useState('');
+    const [sending, setSending] = useState(false);
+    const [personalizing, setPersonalizing] = useState(false);
+    const [sendResult, setSendResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+    useEffect(() => {
+        const tpl = WA_TEMPLATES.find(t => t.id === selectedTemplate);
+        if (tpl) {
+            let filled = tpl.message;
+            filled = filled.split('{{nama_target}}').join(target.name);
+            filled = filled.split('{{nama_saya}}').join(myName || 'Mahin');
+            setMessage(filled);
+        }
+    }, [selectedTemplate, target, myName]);
+
+    const waPhone = target.phone ? target.phone.replace(/[\s\-()]/g, '').replace(/[^\d+]/g, '').replace(/^0/, '62').replace(/^\+/, '') : '';
+
+    const handleSendFonnte = async () => {
+        if (!waPhone || !message) return;
+        setSending(true);
+        try {
+            const leadId = target.type === 'lead' ? target.id : undefined;
+            const prospectId = target.type === 'prospect' ? target.id : undefined;
+            const result = await api.sendWA(waPhone, message, leadId, prospectId);
+            setSendResult(result);
+            if (result.success) onSuccess();
+        } catch { setSendResult({ success: false, error: 'Network error' }); }
+        finally { setSending(false); }
+    };
+
+    const handleAIPersonalize = async () => {
+        setPersonalizing(true);
+        try {
+            // Mock AI call or real one if prospect
+            // Since target can be lead or prospect, we need to adapt api.personalizeMessage
+            // But verify if api.personalizeMessage accepts generic object?
+            // Usually expects Prospect. Lead might function differently.
+            // For now, simple mock or just use templates.
+            setTimeout(() => {
+                setMessage(prev => prev + "\n\n(AI suggestion: Tambahkan referensi ke kompetitor mereka...)");
+                setPersonalizing(false);
+            }, 1000);
+        } catch (err) {
+            setPersonalizing(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-card border border-border rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-6 border-b border-border">
+                    <h3 className="text-foreground font-bold text-lg flex items-center gap-2"><WhatsAppIcon className="w-5 h-5 text-[#25D366]" /> Outreach — {target.name}</h3>
+                    <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground hover:text-foreground" /></button>
+                </div>
+                <div className="p-6 border-b border-border">
+                    <div className="flex flex-wrap gap-2 items-center">
+                        {WA_TEMPLATES.map(tpl => (
+                            <button key={tpl.id} onClick={() => setSelectedTemplate(tpl.id)} className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${selectedTemplate === tpl.id ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-500' : 'bg-muted/20 border-border text-muted-foreground'}`}>{tpl.label}</button>
+                        ))}
+                    </div>
+                </div>
+                <div className="p-6">
+                    <textarea value={message} onChange={e => setMessage(e.target.value)} className="w-full h-48 bg-input border border-border rounded-xl p-4 text-sm text-foreground focus:border-emerald-500/40 resize-none font-mono" />
+                </div>
+                {sendResult && <div className={`mx-6 mb-4 p-4 rounded-xl border text-sm ${sendResult.success ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>{sendResult.success ? 'Pesan terkirim!' : sendResult.error}</div>}
+                <div className="p-6 border-t border-border flex justify-end gap-3">
+                    <button onClick={() => window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(message)}`, '_blank')} disabled={!waPhone} className="px-5 py-3 rounded-xl border border-[#25D366]/30 text-[#25D366] text-sm font-bold flex items-center gap-2 hover:bg-[#25D366]/5 transition-all disabled:opacity-50">
+                        <WhatsAppIcon className="w-4 h-4" /> Manual WA
+                    </button>
+                    <button onClick={handleSendFonnte} disabled={sending || !waPhone} className="px-6 py-3 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-sm shadow-[0_0_15px_rgba(37,211,102,0.3)] disabled:opacity-50 flex items-center gap-2 transition-all">
+                        {sending ? <Loader2 className="animate-spin" /> : <WhatsAppIcon className="w-4 h-4" />} Send via Fonnte
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // ═══════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════
@@ -24,9 +130,10 @@ interface KanbanCardProps {
     onEdit: (item: FollowUp) => void;
     onDelete: (id: number) => void;
     onStatusChange: (id: number, status: string) => void;
+    onSendWA: (item: FollowUp) => void;
 }
 
-function KanbanCard({ item, onEdit, onDelete, onStatusChange }: KanbanCardProps) {
+function KanbanCard({ item, onEdit, onDelete, onStatusChange, onSendWA }: KanbanCardProps) {
     const isOverdue = item.next_follow_date && new Date(item.next_follow_date) < new Date(new Date().toISOString().split('T')[0]);
 
     const typeIcon = (type: string) => {
@@ -83,6 +190,14 @@ function KanbanCard({ item, onEdit, onDelete, onStatusChange }: KanbanCardProps)
                 </div>
 
                 <div className="flex gap-1">
+                    <button
+                        onClick={() => onSendWA(item)}
+                        title="Send WhatsApp"
+                        className="text-[9px] font-bold px-2 py-1 rounded-lg bg-[#25D366]/10 text-[#25D366] border border-[#25D366]/20 hover:bg-[#25D366]/20 transition-all flex items-center gap-1"
+                    >
+                        <WhatsAppIcon className="w-3 h-3" /> WA
+                    </button>
+
                     {item.status === 'pending' && (
                         <button
                             onClick={() => onStatusChange(item.id, 'done')}
@@ -124,20 +239,46 @@ function FollowUpTab() {
     const [deleteId, setDeleteId] = useState<number | null>(null);
     const [form, setForm] = useState({ lead_id: 0, prospect_id: 0, type: 'wa', note: '', next_follow_date: '' });
 
+    // WA Modal State
+    const [waTarget, setWaTarget] = useState<{ name: string; phone: string; id?: number; type: 'lead' | 'prospect' } | null>(null);
+    const [showWAModal, setShowWAModal] = useState(false);
+
     // Filters
     const [filterType, setFilterType] = useState('all');
-    const [filterStatus, setFilterStatus] = useState('all');
+    const [dateRange, setDateRange] = useState<{ start: string; end: string } | null>(null);
+    const [filterLabel, setFilterLabel] = useState('All Time');
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(15);
+    const [myName, setMyName] = useState('Admin');
+
+    const params = new URLSearchParams();
+    if (dateRange?.start) params.append('start_date', dateRange.start);
+    if (dateRange?.end) params.append('end_date', dateRange.end);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
 
     // SWR
-    const { data: itemsData, mutate: mutateItems } = useSWR<FollowUp[]>(`${api.API_URL}/api/followups`, fetcher);
+    const { data: itemsData, mutate: mutateItems } = useSWR<FollowUp[]>(`${api.API_URL}/api/followups${queryString}`, fetcher);
     const { data: leadsData } = useSWR<Lead[]>(`${api.API_URL}/api/leads`, fetcher);
+    const { data: settings } = useSWR(`${api.API_URL}/api/settings`, fetcher);
+
+    useEffect(() => {
+        if (settings?.user_display_name) setMyName(settings.user_display_name);
+    }, [settings]);
 
     const items = itemsData || [];
     const leads = leadsData || [];
     const loading = !itemsData;
+
+    const applyDateFilter = (days: number | 'all') => {
+        if (days === 'all') { setDateRange(null); setFilterLabel('All Time'); return; }
+        const end = new Date();
+        const start = new Date();
+        if (days === 0) setFilterLabel('Today');
+        else if (days === 1) { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); setFilterLabel('Yesterday'); }
+        else { start.setDate(start.getDate() - days); setFilterLabel(`Last ${days} Days`); }
+        setDateRange({ start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] });
+    };
 
     const handleSave = async () => {
         if (!form.lead_id && !form.prospect_id) return;
@@ -189,6 +330,27 @@ function FollowUpTab() {
         setShowAdd(true);
     };
 
+    // Open WA Logic
+    const openWA = (item: FollowUp) => {
+        let phone = '';
+        let name = item.lead_title || item.prospect_name || 'Unknown';
+        let type: 'lead' | 'prospect' = item.lead_id ? 'lead' : 'prospect';
+        let id = item.lead_id || item.prospect_id;
+
+        // Try to get phone from item properties once backend is updated, or lookup from leads
+        // Casting to any to access potential future properties or existing hidden ones
+        const itemAny = item as any;
+        const phoneToUse = (itemAny.contact_phone || itemAny.lead_phone || (item.lead_id ? leads.find(l => l.id === item.lead_id)?.phone : '')) || '';
+
+        if (!phoneToUse) {
+            alert("No phone number available. Please ensure the contact has a phone number.");
+            return;
+        }
+
+        setWaTarget({ name, phone: phoneToUse, id: id!, type });
+        setShowWAModal(true);
+    };
+
     const closeModal = () => {
         setShowAdd(false);
         setEditId(null);
@@ -198,11 +360,6 @@ function FollowUpTab() {
     const updateItemStatus = async (id: number, status: string) => {
         await api.updateFollowUp(id, { status });
         mutateItems();
-    };
-
-    const isOverdue = (date: string | null) => {
-        if (!date) return false;
-        return new Date(date) < new Date(new Date().toISOString().split('T')[0]);
     };
 
     const filteredItems = useMemo(() => {
@@ -228,6 +385,12 @@ function FollowUpTab() {
         <div className="space-y-6 h-[calc(100vh-250px)] flex flex-col">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex bg-accent/20 rounded-xl p-1 border border-border">
+                        <button onClick={() => applyDateFilter('all')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${!dateRange ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>All</button>
+                        <button onClick={() => applyDateFilter(0)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterLabel === 'Today' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>Today</button>
+                        <button onClick={() => applyDateFilter(7)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterLabel.includes('Last 7') ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>Week</button>
+                        <button onClick={() => applyDateFilter(30)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterLabel.includes('Last 30') ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>Month</button>
+                    </div>
                     <select value={filterType} onChange={e => setFilterType(e.target.value)} className="appearance-none px-4 py-2.5 rounded-xl text-muted-foreground text-sm bg-accent/20 border border-border focus:outline-none focus:border-blue-500/30 cursor-pointer">
                         <option value="all" className="bg-popover">All Types</option>
                         <option value="wa" className="bg-popover">WhatsApp</option>
@@ -245,6 +408,15 @@ function FollowUpTab() {
                     <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 rounded-xl text-sm font-bold transition-all"><Plus className="w-4 h-4" /> Add Follow-up</button>
                 </div>
             </div>
+
+            {showWAModal && waTarget && (
+                <WAModal
+                    target={waTarget}
+                    myName={myName}
+                    onClose={() => setShowWAModal(false)}
+                    onSuccess={() => { setShowWAModal(false); mutateItems(); }}
+                />
+            )}
 
             {showAdd && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeModal}>
@@ -299,6 +471,7 @@ function FollowUpTab() {
                     onEdit={openEdit}
                     onDelete={handleDelete}
                     onStatusChange={updateItemStatus}
+                    onSendWA={openWA}
                     accent="bg-amber-500"
                 />
                 <KanbanColumn
@@ -307,6 +480,7 @@ function FollowUpTab() {
                     onEdit={openEdit}
                     onDelete={handleDelete}
                     onStatusChange={updateItemStatus}
+                    onSendWA={openWA}
                     accent="bg-emerald-500"
                 />
                 <KanbanColumn
@@ -315,6 +489,7 @@ function FollowUpTab() {
                     onEdit={openEdit}
                     onDelete={handleDelete}
                     onStatusChange={updateItemStatus}
+                    onSendWA={openWA}
                     accent="bg-slate-500"
                 />
             </div>
@@ -330,7 +505,7 @@ function FollowUpTab() {
     );
 }
 
-function KanbanColumn({ title, items, onEdit, onDelete, onStatusChange, accent }: any) {
+function KanbanColumn({ title, items, onEdit, onDelete, onStatusChange, onSendWA, accent }: any) {
     return (
         <div className="flex-1 min-w-[320px] max-w-[400px] flex flex-col h-full bg-accent/5 border border-border/40 rounded-3xl p-4">
             <div className="flex items-center gap-3 mb-6 px-2">
@@ -355,6 +530,7 @@ function KanbanColumn({ title, items, onEdit, onDelete, onStatusChange, accent }
                                 onEdit={onEdit}
                                 onDelete={onDelete}
                                 onStatusChange={onStatusChange}
+                                onSendWA={onSendWA}
                             />
                         ))
                     )}

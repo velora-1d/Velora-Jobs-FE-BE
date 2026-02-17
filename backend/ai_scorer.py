@@ -38,7 +38,7 @@ async def call_ai(
         # Map model names to actual API model identifiers
         model_map = {
             "gpt-4o-mini": "gpt-4o-mini",
-            "deepseek-r1": "deepseek-r1-250528",
+            "deepseek-r1": "deepseek-r1", # Try generic alias
             "kimi-k2": "kimi-k2-250905",
             "glm-4": "glm-4-7-251222",
         }

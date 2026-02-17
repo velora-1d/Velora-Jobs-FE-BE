@@ -193,11 +193,32 @@ export const fetcher = (url: string) => authFetch(url);
 
 export const api = {
     API_URL,
+
+    async login(email: string, pass: string): Promise<{ access_token: string; token_type: string }> {
+        const formData = new FormData();
+        formData.append('username', email);
+        formData.append('password', pass);
+        const res = await fetch(`${API_URL}/api/login`, {
+            method: 'POST',
+            body: formData,
+        });
+        if (!res.ok) throw new Error('Invalid credentials');
+        const data = await res.json();
+        localStorage.setItem('token', data.access_token);
+        return data;
+    },
     // ─── Leads ───
-    async getLeads(startDate?: string, endDate?: string): Promise<Lead[]> {
+    async getLeads(filters: { start_date?: string; end_date?: string; source?: string; status?: string; min_score?: number; max_score?: number; wa_status?: string; search?: string } = {}): Promise<Lead[]> {
         const params = new URLSearchParams();
-        if (startDate) params.append('start_date', startDate);
-        if (endDate) params.append('end_date', endDate);
+        if (filters.start_date) params.append('start_date', filters.start_date);
+        if (filters.end_date) params.append('end_date', filters.end_date);
+        if (filters.source && filters.source !== 'all') params.append('source', filters.source);
+        if (filters.status && filters.status !== 'all') params.append('status', filters.status);
+        if (filters.min_score !== undefined) params.append('min_score', filters.min_score.toString());
+        if (filters.max_score !== undefined) params.append('max_score', filters.max_score.toString());
+        if (filters.wa_status && filters.wa_status !== 'all') params.append('wa_status', filters.wa_status);
+        if (filters.search) params.append('search', filters.search);
+
         const queryString = params.toString() ? `?${params.toString()}` : '';
         return authFetch(`${API_URL}/api/leads${queryString}`);
     },
@@ -238,6 +259,10 @@ export const api = {
         return authFetch(`${API_URL}/api/settings`, { method: 'POST', body: JSON.stringify(config) });
     },
 
+    async testTelegram(): Promise<{ success: boolean; error?: string }> {
+        return authFetch(`${API_URL}/api/settings/test-telegram`, { method: 'POST' });
+    },
+
     // ─── WhatsApp ───
     async sendWA(target: string, message: string, leadId?: number, prospectId?: number): Promise<{ success: boolean; error?: string; detail?: string }> {
         return authFetch(`${API_URL}/api/wa/send`, {
@@ -247,16 +272,19 @@ export const api = {
     },
 
     // ─── Follow-ups ───
-    async getFollowUps(leadId?: number): Promise<FollowUp[]> {
-        const q = leadId ? `?lead_id=${leadId}` : '';
-        return authFetch(`${API_URL}/api/followups${q}`);
+    async getFollowUps(leadId?: number, filters: { start_date?: string; end_date?: string } = {}): Promise<FollowUp[]> {
+        const params = new URLSearchParams();
+        if (leadId) params.append('lead_id', leadId.toString());
+        if (filters.start_date) params.append('start_date', filters.start_date);
+        if (filters.end_date) params.append('end_date', filters.end_date);
+        return authFetch(`${API_URL}/api/followups?${params.toString()}`);
     },
 
     async createFollowUp(data: { lead_id?: number; prospect_id?: number; type?: string; note?: string; next_follow_date?: string }) {
         return authFetch(`${API_URL}/api/followups`, { method: 'POST', body: JSON.stringify(data) });
     },
 
-    async updateFollowUp(id: number, data: Partial<{ type: string; note: string; status: string; next_follow_date: string }>) {
+    async updateFollowUp(id: number, data: Partial<FollowUp>) {
         return authFetch(`${API_URL}/api/followups/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     },
 
@@ -269,11 +297,11 @@ export const api = {
         return authFetch(`${API_URL}/api/projects`);
     },
 
-    async createProject(data: { lead_id: number; name: string; description?: string; budget?: number; deadline?: string }) {
+    async createProject(data: Partial<Project>) {
         return authFetch(`${API_URL}/api/projects`, { method: 'POST', body: JSON.stringify(data) });
     },
 
-    async updateProject(id: number, data: Partial<{ name: string; description: string; status: string; budget: number; progress: number; deadline: string }>) {
+    async updateProject(id: number, data: Partial<Project>) {
         return authFetch(`${API_URL}/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     },
 
@@ -282,16 +310,15 @@ export const api = {
     },
 
     // ─── Invoices ───
-    async getInvoices(projectId?: number): Promise<Invoice[]> {
-        const q = projectId ? `?project_id=${projectId}` : '';
-        return authFetch(`${API_URL}/api/invoices${q}`);
+    async getInvoices(): Promise<Invoice[]> {
+        return authFetch(`${API_URL}/api/invoices`);
     },
 
-    async createInvoice(data: { project_id: number; items: InvoiceItem[]; tax_percent?: number; due_date?: string; notes?: string }) {
+    async createInvoice(data: Partial<Invoice>) {
         return authFetch(`${API_URL}/api/invoices`, { method: 'POST', body: JSON.stringify(data) });
     },
 
-    async updateInvoice(id: number, data: Partial<{ status: string; items: InvoiceItem[]; tax_percent: number; due_date: string; notes: string }>) {
+    async updateInvoice(id: number, data: Partial<Invoice>) {
         return authFetch(`${API_URL}/api/invoices/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     },
 
@@ -299,92 +326,18 @@ export const api = {
         return authFetch(`${API_URL}/api/invoices/${id}`, { method: 'DELETE' });
     },
 
-    // ─── Stats ───
-    async getStats(): Promise<Stats> {
-        return authFetch(`${API_URL}/api/stats`);
-    },
-
-    // ─── Auth ───
-    async login(email: string, password: string) {
-        const formData = new FormData();
-        formData.append('username', email);
-        formData.append('password', password);
-
-        const res = await fetch(`${API_URL}/api/login`, {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!res.ok) throw new Error('Login failed');
-
-        const data = await res.json();
-        localStorage.setItem('token', data.access_token);
-        return data;
-    },
-
-    // ─── Telegram ───
-    async testTelegram(): Promise<{ success: boolean; error?: string }> {
-        return authFetch(`${API_URL}/api/telegram/test`, { method: 'POST' });
-    },
-
-    // ─── Campaigns ───
-    async getCampaigns(): Promise<Campaign[]> {
-        return authFetch(`${API_URL}/api/campaigns`);
-    },
-
-    async createCampaign(data: { name: string; message_template?: string; target_criteria?: string; scheduled_at?: string }) {
-        return authFetch(`${API_URL}/api/campaigns`, { method: 'POST', body: JSON.stringify(data) });
-    },
-
-    async updateCampaign(id: number, data: Partial<Campaign>) {
-        return authFetch(`${API_URL}/api/campaigns/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-    },
-
-    async deleteCampaign(id: number) {
-        return authFetch(`${API_URL}/api/campaigns/${id}`, { method: 'DELETE' });
-    },
-
-    // ─── Campaign Runner ───
-    async launchCampaign(id: number) {
-        return authFetch(`${API_URL}/api/campaigns/${id}/launch`, { method: 'POST' });
-    },
-
-    async getCampaignStatus() {
-        return authFetch(`${API_URL}/api/campaigns/status`);
-    },
-
-    async stopCampaign() {
-        return authFetch(`${API_URL}/api/campaigns/stop`, { method: 'POST' });
-    },
-
-    // ─── Promotion Templates ───
-    async getTemplates(): Promise<PromotionTemplate[]> {
-        return authFetch(`${API_URL}/api/templates`);
-    },
-
-    async createTemplate(data: { title: string; category: string; content: string; variables?: string }) {
-        return authFetch(`${API_URL}/api/templates`, { method: 'POST', body: JSON.stringify(data) });
-    },
-
-    async updateTemplate(id: number, data: Partial<PromotionTemplate>) {
-        return authFetch(`${API_URL}/api/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-    },
-
-    async deleteTemplate(id: number) {
-        return authFetch(`${API_URL}/api/templates/${id}`, { method: 'DELETE' });
-    },
-
-    async seedTemplates() {
-        return authFetch(`${API_URL}/api/templates/seed`, { method: 'POST' });
-    },
-
     // ─── Prospects ───
-    async getProspects(startDate?: string, endDate?: string, category?: string, status?: string): Promise<Prospect[]> {
+    async getProspects(filters: { start_date?: string; end_date?: string; category?: string; status?: string; min_score?: number; max_score?: number; wa_status?: string; search?: string } = {}): Promise<Prospect[]> {
         const params = new URLSearchParams();
-        if (startDate) params.append('start_date', startDate);
-        if (endDate) params.append('end_date', endDate);
-        if (category) params.append('category', category);
-        if (status) params.append('status', status);
+        if (filters.start_date) params.append('start_date', filters.start_date);
+        if (filters.end_date) params.append('end_date', filters.end_date);
+        if (filters.category && filters.category !== 'all') params.append('category', filters.category);
+        if (filters.status && filters.status !== 'all') params.append('status', filters.status);
+        if (filters.min_score !== undefined) params.append('min_score', filters.min_score.toString());
+        if (filters.max_score !== undefined) params.append('max_score', filters.max_score.toString());
+        if (filters.wa_status && filters.wa_status !== 'all') params.append('wa_status', filters.wa_status);
+        if (filters.search) params.append('search', filters.search);
+
         const qs = params.toString() ? `?${params.toString()}` : '';
         return authFetch(`${API_URL}/api/prospects${qs}`);
     },
@@ -424,6 +377,41 @@ export const api = {
     async generateTemplate(targetCategory: string, serviceType: string, tone: string = 'professional'): Promise<AITemplate> {
         const params = new URLSearchParams({ target_category: targetCategory, service_type: serviceType, tone });
         return authFetch(`${API_URL}/api/campaigns/generate-template?${params.toString()}`, { method: 'POST' });
+    },
+
+    async getCampaignStatus(): Promise<any> {
+        return authFetch(`${API_URL}/api/campaigns/status`);
+    },
+
+    // ─── Campaigns ───
+    async createCampaign(data: any) {
+        return authFetch(`${API_URL}/api/campaigns`, { method: 'POST', body: JSON.stringify(data) });
+    },
+    async updateCampaign(id: number, data: any) {
+        return authFetch(`${API_URL}/api/campaigns/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+    async deleteCampaign(id: number) {
+        return authFetch(`${API_URL}/api/campaigns/${id}`, { method: 'DELETE' });
+    },
+    async launchCampaign(id: number) {
+        return authFetch(`${API_URL}/api/campaigns/${id}/launch`, { method: 'POST' });
+    },
+    async stopCampaign() {
+        return authFetch(`${API_URL}/api/campaigns/stop`, { method: 'POST' });
+    },
+
+    // ─── Templates ───
+    async createTemplate(data: any) {
+        return authFetch(`${API_URL}/api/templates`, { method: 'POST', body: JSON.stringify(data) });
+    },
+    async updateTemplate(id: number, data: any) {
+        return authFetch(`${API_URL}/api/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+    async deleteTemplate(id: number) {
+        return authFetch(`${API_URL}/api/templates/${id}`, { method: 'DELETE' });
+    },
+    async seedTemplates() {
+        return authFetch(`${API_URL}/api/templates/seed`, { method: 'POST' });
     },
 
     async personalizeMessage(recipientData: any): Promise<{ message: string }> {

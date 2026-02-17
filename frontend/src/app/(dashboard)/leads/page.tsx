@@ -109,9 +109,27 @@ export default function LeadsPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(25);
 
+    // Debounce search
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
+    // Construct Query String
     const params = new URLSearchParams();
     if (dateRange?.start) params.append('start_date', dateRange.start);
     if (dateRange?.end) params.append('end_date', dateRange.end);
+    if (filterSource !== 'all') params.append('source', filterSource);
+    if (filterStatus !== 'all') params.append('status', filterStatus);
+    if (filterWaStatus !== 'all') params.append('wa_status', filterWaStatus);
+    if (filterScore !== 'all') {
+        if (filterScore === 'high') params.append('min_score', '75');
+        if (filterScore === 'mid') { params.append('min_score', '50'); params.append('max_score', '74'); }
+        if (filterScore === 'low') params.append('max_score', '49');
+    }
+    if (debouncedSearch) params.append('search', debouncedSearch);
+
     const queryString = params.toString() ? `?${params.toString()}` : '';
 
     const { data: leadsData, error: leadsError, mutate: mutateLeads } = useSWR<Lead[]>(`${api.API_URL}/api/leads${queryString}`, fetcher);
@@ -147,7 +165,7 @@ export default function LeadsPage() {
     };
 
     const handleExport = () => {
-        const exportData = filteredLeads.map(l => ({
+        const exportData = leads.map(l => ({
             Title: l.title, Company: l.company, Location: l.location,
             Source: l.source, Score: l.match_score || '', Status: l.status,
             URL: l.url || '', Description: l.description || '',
@@ -158,32 +176,13 @@ export default function LeadsPage() {
         XLSX.writeFile(wb, `leads_export_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    const filteredLeads = useMemo(() => {
-        return leads.filter(lead => {
-            const matchSource = filterSource === 'all' || lead.source === filterSource;
-            const matchStatus = filterStatus === 'all' || lead.status === filterStatus;
-            const matchWaStatus = filterWaStatus === 'all'
-                || (filterWaStatus === 'contacted' && !!lead.wa_contacted_at)
-                || (filterWaStatus === 'not_contacted' && !lead.wa_contacted_at);
-            const matchScore = filterScore === 'all'
-                || (filterScore === 'high' && (lead.match_score || 0) >= 75)
-                || (filterScore === 'mid' && (lead.match_score || 0) >= 50 && (lead.match_score || 0) < 75)
-                || (filterScore === 'low' && (lead.match_score || 0) < 50);
-            const matchSearch = !searchQuery
-                || lead.title.toLowerCase().includes(searchQuery.toLowerCase())
-                || lead.company.toLowerCase().includes(searchQuery.toLowerCase())
-                || lead.location.toLowerCase().includes(searchQuery.toLowerCase());
-            return matchSource && matchStatus && matchWaStatus && matchScore && matchSearch;
-        });
-    }, [leads, filterSource, filterStatus, filterWaStatus, filterScore, searchQuery]);
-
     // Reset page when filters change
-    useEffect(() => { setCurrentPage(1); }, [filterSource, filterStatus, filterScore, searchQuery]);
+    useEffect(() => { setCurrentPage(1); }, [filterSource, filterStatus, filterWaStatus, filterScore, debouncedSearch, dateRange]);
 
     const paginatedLeads = useMemo(() => {
         const start = (currentPage - 1) * pageSize;
-        return filteredLeads.slice(start, start + pageSize);
-    }, [filteredLeads, currentPage, pageSize]);
+        return leads.slice(start, start + pageSize);
+    }, [leads, currentPage, pageSize]);
 
     return (
         <div className="w-full">
@@ -193,7 +192,7 @@ export default function LeadsPage() {
                         <Database className="w-8 h-8 text-emerald-500" /> Job Leads
                     </h1>
                     <p className="text-muted-foreground mt-2 text-lg">
-                        {filteredLeads.length} of {leads.length} leads · {filterLabel}
+                        {leads.length} of {leads.length} leads · {filterLabel}
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -247,7 +246,7 @@ export default function LeadsPage() {
             <div className="glass-panel rounded-3xl overflow-hidden min-h-[500px] relative flex flex-col">
                 {loading ? (
                     <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground py-20"><Loader2 className="w-10 h-10 animate-spin mb-4 text-emerald-500" /><p className="font-mono text-sm tracking-widest uppercase">Loading...</p></div>
-                ) : filteredLeads.length === 0 ? (
+                ) : leads.length === 0 ? (
                     <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground py-20"><p className="text-lg">No leads found.</p><p className="text-sm mt-1">Use the Scraper to find job listings from LinkedIn, Upwork, etc.</p></div>
                 ) : (
                     <>
@@ -295,7 +294,7 @@ export default function LeadsPage() {
                         </div>
                         <Pagination
                             currentPage={currentPage}
-                            totalItems={filteredLeads.length}
+                            totalItems={leads.length}
                             pageSize={pageSize}
                             onPageChange={setCurrentPage}
                             onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
