@@ -196,82 +196,148 @@ export default function TasksPage() {
     };
 
     return (
-        <div className="w-full h-[calc(100vh-8rem)] flex flex-col relative">
+        <div className="w-full h-full flex flex-col relative">
             <style jsx global>{`
                 .rbc-calendar { font-family: inherit; }
-                .rbc-month-view, .rbc-time-view, .rbc-agenda-view { border: none; }
-                .rbc-header { border-bottom: 1px solid hsl(var(--border)); color: hsl(var(--muted-foreground)); font-weight: 600; padding: 12px 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
-                .rbc-day-bg { border-left: 1px solid hsl(var(--border)); }
-                .rbc-off-range-bg { bg: transparent; opacity: 0.3; }
-                .rbc-today { background-color: hsl(var(--accent) / 0.1); }
-                .rbc-event { background: transparent; padding: 0; }
-                .rbc-row-segment { padding: 2px 4px; }
+                .rbc-month-view, .rbc-time-view, .rbc-agenda-view { border: none !important; background: transparent !important; }
+                .rbc-header { border-bottom: 1px solid hsl(var(--border)) !important; color: hsl(var(--muted-foreground)); font-weight: 700; padding: 15px 0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; }
+                .rbc-day-bg { border-left: 1px solid hsl(var(--border) / 0.5) !important; transition: background 0.2s; }
+                .rbc-day-bg:hover { background: hsl(var(--accent) / 0.05); }
+                .rbc-off-range-bg { background: hsl(var(--accent) / 0.02) !important; }
+                .rbc-today { background-color: hsl(var(--blue-500) / 0.05) !important; }
+                .rbc-event { background: transparent !important; padding: 0 !important; border: none !important; }
+                .rbc-row-segment { padding: 3px 6px !important; }
+                .rbc-month-row { border-top: 1px solid hsl(var(--border) / 0.5) !important; }
             `}</style>
 
-            <div className="flex justify-between items-center mb-0">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
-                        <CheckSquare className="w-8 h-8 text-blue-500" />
+                    <h1 className="text-4xl font-extrabold text-foreground tracking-tight flex items-center gap-4">
+                        <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 shadow-lg shadow-blue-500/5">
+                            <CheckSquare className="w-8 h-8 text-blue-500" />
+                        </div>
                         Tasks & Schedule
                     </h1>
-                    <p className="text-muted-foreground mt-1">Manage your follow-ups and meetings</p>
+                    <p className="text-muted-foreground mt-2 font-medium flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-500" />
+                        Manage your follow-ups and strategic meetings
+                    </p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex bg-accent/20 p-1 rounded-xl border border-border">
-                        <button onClick={() => setView('calendar')} className={`p-2 rounded-lg transition-all ${view === 'calendar' ? 'bg-blue-500/20 text-blue-500' : 'text-muted-foreground hover:text-foreground'}`}><CalendarIcon className="w-5 h-5" /></button>
-                        <button onClick={() => setView('list')} className={`p-2 rounded-lg transition-all ${view === 'list' ? 'bg-blue-500/20 text-blue-500' : 'text-muted-foreground hover:text-foreground'}`}><List className="w-5 h-5" /></button>
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                    <div className="flex bg-accent/10 p-1.5 rounded-2xl border border-border/50 backdrop-blur-sm">
+                        <button
+                            onClick={() => setView('calendar')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-bold text-xs ${view === 'calendar' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-muted-foreground hover:text-foreground hover:bg-accent/20'}`}
+                        >
+                            <CalendarIcon className="w-4 h-4" /> CALENDAR
+                        </button>
+                        <button
+                            onClick={() => setView('list')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-bold text-xs ${view === 'list' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-muted-foreground hover:text-foreground hover:bg-accent/20'}`}
+                        >
+                            <List className="w-4 h-4" /> LIST VIEW
+                        </button>
                     </div>
-                    <button onClick={openCreateModal} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl transition-all font-medium border border-blue-400/20 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-                        <Plus className="w-4 h-4" /> New Task
+                    <button onClick={openCreateModal} className="group flex-1 md:flex-none flex items-center justify-center gap-3 bg-foreground text-background px-6 py-3.5 rounded-2xl transition-all font-bold text-sm hover:scale-[1.02] active:scale-[0.98] shadow-xl">
+                        <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" /> NEW TASK
                     </button>
                 </div>
             </div>
 
-            <div className="flex-1 glass-panel bg-card border border-border rounded-3xl p-6 overflow-hidden mt-6">
-                {loading ? (
-                    <div className="h-full flex items-center justify-center text-muted-foreground">Loading tasks...</div>
-                ) : view === 'calendar' ? (
-                    <Calendar
-                        localizer={localizer}
-                        events={events}
-                        startAccessor="start"
-                        endAccessor="end"
-                        style={{ height: '100%' }}
-                        components={{
-                            toolbar: CustomToolbar,
-                            event: CustomEvent
-                        }}
-                        onSelectEvent={openEditModal}
-                    />
-                ) : (
-                    <div className="space-y-4 overflow-y-auto h-full pr-2">
-                        {events.length === 0 && <p className="text-center text-muted-foreground py-10">No tasks found.</p>}
-                        {events.map(event => (
-                            <div key={event.id} className="bg-accent/20 border border-border p-4 rounded-xl flex justify-between items-center group hover:bg-accent/30 transition-colors cursor-pointer" onClick={() => openEditModal(event)}>
-                                <div className="flex items-center gap-4">
-                                    <input
-                                        type="checkbox"
-                                        checked={event.status === 'done'}
-                                        onChange={(e) => {
-                                            e.stopPropagation();
-                                            api.updateFollowUp(event.id, { status: event.status === 'done' ? 'pending' : 'done' }).then(() => mutateTasks());
-                                        }}
-                                        className="w-5 h-5 rounded border-muted-foreground bg-transparent text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
-                                    />
-                                    <div>
-                                        <h3 className={`font-medium transition-colors ${event.status === 'done' ? 'text-muted-foreground line-through' : 'text-foreground group-hover:text-blue-500'}`}>
-                                            {event.title}
-                                        </h3>
-                                        <p className="text-sm text-muted-foreground">{moment(event.start).format('LLL')}</p>
-                                    </div>
+            <div className="flex-1 relative">
+                <AnimatePresence mode="wait">
+                    {loading ? (
+                        <motion.div
+                            key="loading"
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground space-y-4"
+                        >
+                            <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+                            <p className="font-mono text-xs uppercase tracking-widest animate-pulse">Synchronizing Engine...</p>
+                        </motion.div>
+                    ) : view === 'calendar' ? (
+                        <motion.div
+                            key="calendar"
+                            initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }}
+                            transition={{ duration: 0.3, ease: 'easeOut' }}
+                            className="h-full glass-panel bg-card/30 backdrop-blur-xl border border-border/50 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden"
+                        >
+                            <Calendar
+                                localizer={localizer}
+                                events={events}
+                                startAccessor="start"
+                                endAccessor="end"
+                                style={{ height: '100%' }}
+                                components={{
+                                    toolbar: CustomToolbar,
+                                    event: CustomEvent
+                                }}
+                                onSelectEvent={openEditModal}
+                            />
+                        </motion.div>
+                    ) : (
+                        <motion.div
+                            key="list"
+                            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+                            transition={{ duration: 0.3, ease: 'easeOut' }}
+                            className="h-full space-y-4 overflow-y-auto pr-4 scrollbar-hide"
+                        >
+                            {events.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground bg-accent/5 rounded-[2.5rem] border border-dashed border-border/50 p-20">
+                                    <AlertCircle className="w-16 h-16 opacity-10 mb-6" />
+                                    <h3 className="text-xl font-bold opacity-30">No Strategic Tasks</h3>
+                                    <p className="text-sm opacity-20 max-w-[250px] text-center mt-2">Your schedule is clear. Use the engine to generate new opportunities.</p>
                                 </div>
-                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${event.status === 'done' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'}`}>
-                                    {event.status === 'done' ? 'Done' : 'Pending'}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                            ) : (
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    {events.map(event => (
+                                        <motion.div
+                                            layout
+                                            key={event.id}
+                                            onClick={() => openEditModal(event)}
+                                            className="group relative glass-panel bg-card/40 backdrop-blur-lg border border-border/50 p-6 rounded-3xl flex items-center justify-between gap-6 transition-all cursor-pointer hover:bg-accent/10 hover:border-blue-500/30 hover:shadow-xl hover:translate-y-[-2px] active:scale-[0.98]"
+                                        >
+                                            <div className="flex items-center gap-5 flex-1 min-w-0">
+                                                <div className="relative">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={event.status === 'done'}
+                                                        onChange={(e) => {
+                                                            e.stopPropagation();
+                                                            api.updateFollowUp(event.id, { status: event.status === 'done' ? 'pending' : 'done' }).then(() => mutateTasks());
+                                                        }}
+                                                        className="w-6 h-6 rounded-lg border-2 border-border bg-transparent text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer transition-all checked:bg-blue-600"
+                                                    />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <h3 className={`font-bold text-lg truncate transition-all duration-300 ${event.status === 'done' ? 'text-muted-foreground/50 line-through' : 'text-foreground group-hover:text-blue-500'}`}>
+                                                        {event.title}
+                                                    </h3>
+                                                    <div className="flex items-center gap-3 mt-1.5">
+                                                        <span className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground/60 bg-accent/10 px-2 py-1 rounded-md uppercase tracking-tighter">
+                                                            <Clock className="w-3 h-3" /> {moment(event.start).format('MMM D, HH:mm')}
+                                                        </span>
+                                                        <span className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-tighter ${event.type === 'wa' ? 'bg-emerald-500/10 text-emerald-500' : event.type === 'call' ? 'bg-blue-500/10 text-blue-500' : 'bg-purple-500/10 text-purple-500'}`}>
+                                                            {event.type}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <ChevronRight className="w-5 h-5 text-muted-foreground/30 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+
+                                            {/* Status Badge */}
+                                            {event.status === 'done' && (
+                                                <div className="absolute top-3 right-3">
+                                                    <CheckSquare className="w-5 h-5 text-emerald-500/50" />
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             {/* Modal */}
