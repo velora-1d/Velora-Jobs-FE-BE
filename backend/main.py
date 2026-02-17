@@ -210,6 +210,7 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
         
         saved_leads = 0
         saved_prospects = 0
+        skipped_dupes = 0
         
         for item in results:
             if interrupt_event.is_set(): 
@@ -221,10 +222,21 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
             # ── Google Maps → save to PROSPECTS table ──
             if source == 'Google Maps':
                 maps_url = item.get('maps_url', '')
+                phone = item.get('phone', '').strip()
+                name = item.get('name', '').strip()
+                category_val = item.get('category', 'Local Business')
+
+                # Multi-field dedup: maps_url OR phone OR name+category
+                existing = None
                 if maps_url:
                     existing = db.query(Prospect).filter(Prospect.maps_url == maps_url).first()
-                else:
-                    existing = None
+                if not existing and phone:
+                    existing = db.query(Prospect).filter(Prospect.phone == phone).first()
+                if not existing and name:
+                    existing = db.query(Prospect).filter(
+                        Prospect.name == name,
+                        Prospect.category == category_val
+                    ).first()
                 
                 if not existing:
                     log_message(f"✨ New prospect: {item['name']} | Phone: {item.get('phone', '-')}")
@@ -260,11 +272,25 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
                     db.add(new_prospect)
                     saved_prospects += 1
                 else:
-                    log_message(f"⏭️ Duplicate prospect (skip): {item['name']}")
+                    skipped_dupes += 1
+                    log_message(f"⏭️ Duplicate prospect (skip): {item['name']} — matched by {'maps_url' if maps_url and db.query(Prospect).filter(Prospect.maps_url == maps_url).first() else 'phone' if phone and db.query(Prospect).filter(Prospect.phone == phone).first() else 'name+category'}")
             
             # ── Other sources → save to LEADS table (as before) ──
             else:
-                existing = db.query(Lead).filter(Lead.url == item['url']).first()
+                lead_url = item.get('url', '')
+                lead_title = item.get('title', '').strip()
+                lead_company = item.get('company', '').strip()
+
+                # Multi-field dedup: url OR title+company
+                existing = None
+                if lead_url:
+                    existing = db.query(Lead).filter(Lead.url == lead_url).first()
+                if not existing and lead_title and lead_company:
+                    existing = db.query(Lead).filter(
+                        Lead.title == lead_title,
+                        Lead.company == lead_company
+                    ).first()
+
                 if not existing:
                     log_message(f"✨ New lead found: {item['title']} @ {item['company']}")
                     try:
@@ -294,6 +320,9 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
                     )
                     db.add(new_lead)
                     saved_leads += 1
+                else:
+                    skipped_dupes += 1
+                    log_message(f"⏭️ Duplicate lead (skip): {item['title']} @ {item['company']}")
         
         db.commit()
         
@@ -302,8 +331,10 @@ async def run_scraper_task(keywords, location, sources, limit, safe_mode, cookie
             log_message(f"🎉 Scraping finished! Saved {saved_prospects} new prospects.")
         if saved_leads > 0:
             log_message(f"🎉 Scraping finished! Saved {saved_leads} new leads.")
+        if skipped_dupes > 0:
+            log_message(f"🔄 Skipped {skipped_dupes} duplicate entries.")
         if total == 0:
-            log_message(f"📭 Scraping finished. No new data found (all duplicates).")
+            log_message(f"📭 Scraping finished. No new data found (all {skipped_dupes} entries were duplicates).")
 
         # Telegram notification
         if total > 0:
