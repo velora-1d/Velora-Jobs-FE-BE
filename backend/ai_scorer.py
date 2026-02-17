@@ -43,7 +43,7 @@ async def call_ai(
             "glm-4": "glm-4-7-251222",
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 f"{AI_BASE_URL}/chat/completions",
                 headers={
@@ -63,13 +63,16 @@ async def call_ai(
                 content = data["choices"][0]["message"]["content"].strip()
                 return {"success": True, "content": content, "error": ""}
             else:
+                error_msg = f"API returned {response.status_code}: {response.text}"
+                print(f"[AI Error] {error_msg}")
                 return {
                     "success": False,
                     "content": "",
-                    "error": f"API returned {response.status_code}",
+                    "error": error_msg,
                 }
 
     except Exception as e:
+        print(f"[AI Exception] {str(e)}")
         return {"success": False, "content": "", "error": str(e)}
 
 
