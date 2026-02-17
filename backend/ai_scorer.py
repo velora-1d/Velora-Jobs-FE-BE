@@ -438,53 +438,183 @@ Langsung tulis pesannya saja tanpa penjelasan tambahan."""
 async def generate_proposal_content(lead_data: dict) -> dict:
     """
     Generate professional proposal sections using GLM-4.
-    Returns: {"summary": str, "offerings": list, "pricing_strategy": str}
+    Context-aware: adapts content based on client type (Islamic/School/Business).
+    Returns rich structured proposal with multiple sections.
     """
     title = lead_data.get("title", lead_data.get("name", "Potential Client"))
-    company = lead_data.get("company", "Your Company")
+    company = lead_data.get("company", lead_data.get("category", "Your Company"))
     description = lead_data.get("description", "")
     has_website = lead_data.get("has_website", True)
+    category = lead_data.get("category", company)
+    address = lead_data.get("location", lead_data.get("address", "Indonesia"))
+    rating = lead_data.get("rating")
 
-    prompt = f"""Kamu adalah Business Consultant di Velora Jobs.
-Tugas: Buat draf proposal profesional untuk calon klien berikut.
+    # Detect client type using shared helper
+    rtype = _detect_recipient_type(category, company, title)
+    time_greeting = _get_time_greeting()
 
-Klien: {title} @ {company}
-Detail Kebutuhan/Konteks: {description}
-Status Website: {"Sudah punya website" if has_website else "Belum punya website"}
+    # Build contextual greeting
+    if rtype == "islamic":
+        greeting = "Assalamu'alaikum Warahmatullahi Wabarakatuh"
+        client_label = "Pesantren/Lembaga Islami"
+    elif rtype == "school":
+        greeting = f"{time_greeting}, Bapak/Ibu"
+        client_label = "Lembaga Pendidikan"
+    else:
+        greeting = f"{time_greeting}, Bapak/Ibu"
+        client_label = "Pelaku Usaha/UMKM"
 
-Velora Jobs menawarkan:
-1. Web Development Pro (React/Next.js) - Fokus estetika premium & SEO.
-2. Sistem Manajemen (Sekolah/Pesantren) - Fokus efisiensi & database.
+    # Build service context per type
+    if rtype == "islamic":
+        services_context = """Layanan Velora Jobs untuk Pesantren/Lembaga Islami:
+1. Website Resmi Pesantren — Landing page informatif, pendaftaran santri online, galeri kegiatan
+2. Sistem Manajemen Pesantren (SMP) — Database santri, absensi digital, pembayaran SPP online, raport
+3. Aplikasi Wali Santri — Portal untuk wali santri melihat perkembangan anak
+4. Digitalisasi Administrasi — Surat-menyurat, inventaris, keuangan pesantren"""
+    elif rtype == "school":
+        services_context = """Layanan Velora Jobs untuk Lembaga Pendidikan:
+1. Website Sekolah Profesional — Profil sekolah, PPDB online, berita & galeri
+2. Sistem Manajemen Sekolah — e-Raport, database siswa, absensi digital, jadwal
+3. Portal Orang Tua — Akses nilai, absensi, dan komunikasi guru-orang tua
+4. Integrasi Data — Sinkronisasi dengan EMIS/Dapodik"""
+    else:
+        services_context = """Layanan Velora Jobs untuk UMKM/Bisnis:
+1. Website Bisnis Profesional — Company profile, landing page, portfolio, SEO-optimized
+2. Sistem CRM & Manajemen — Kelola pelanggan, follow-up otomatis, laporan penjualan
+3. Optimasi Google Maps & SEO — Tingkatkan visibilitas online dan rating
+4. Aplikasi Custom — Sistem inventory, POS, booking, sesuai kebutuhan bisnis"""
 
-Buat konten dalam Bahasa Indonesia dengan format JSON:
+    prompt = f"""Kamu adalah Business Consultant senior di Velora Jobs.
+Tugas: Buat draf proposal profesional LENGKAP untuk calon klien berikut.
+
+═══ DATA KLIEN ═══
+- Nama/Kontak: {title}
+- Instansi/Perusahaan: {company}
+- Kategori: {category}
+- Lokasi: {address}
+- Tipe klien: {client_label}
+- Status Website: {"Sudah punya website" if has_website else "Belum punya website"}
+- Rating Google: {rating if rating else "N/A"}
+- Konteks tambahan: {description}
+
+═══ LAYANAN YANG TERSEDIA ═══
+{services_context}
+
+═══ FORMAT OUTPUT (JSON) ═══
+Buat konten proposal dalam Bahasa Indonesia dengan format JSON berikut.
+PENTING: Sesuaikan isi dengan tipe klien ({client_label}).
+
 {{
-  "summary": "1 paragraf ringkasan eksekutif yang persuasif.",
-  "offerings": ["3-4 poin layanan yang paling relevan untuk klien ini"],
-  "pricing_strategy": "Saran strategi harga (Entry/Mid/Premium) dalam 1 kalimat."
+  "summary": "1 paragraf ringkasan eksekutif yang persuasif dan spesifik untuk klien ini. Sebutkan nama instansi.",
+  "problem_analysis": "1-2 paragraf analisis masalah/kebutuhan spesifik klien. {'Untuk pesantren, fokus pada efisiensi administrasi dan dakwah digital.' if rtype == 'islamic' else 'Untuk sekolah, fokus pada efisiensi admin dan kualitas pembelajaran.' if rtype == 'school' else 'Untuk bisnis, fokus pada pertumbuhan pelanggan dan efisiensi operasional.'}",
+  "offerings": [
+    {{
+      "title": "Nama layanan",
+      "description": "Deskripsi singkat 1-2 kalimat",
+      "deliverables": ["Item deliverable 1", "Item deliverable 2", "Item deliverable 3"]
+    }}
+  ],
+  "timeline": "Estimasi timeline pengerjaan (contoh: '4-6 minggu untuk fase pertama')",
+  "pricing_strategy": "Strategi harga yang realistis dan sesuai skala klien. {'Sensitif harga, tawarkan paket entry yang terjangkau.' if rtype == 'islamic' else 'Tawarkan paket sesuai skala sekolah.' if rtype == 'school' else 'Tawarkan paket bertahap dari basic ke premium.'}",
+  "why_us": "2-3 kalimat mengapa memilih Velora Jobs. Sebutkan keunggulan spesifik.",
+  "next_steps": "Langkah selanjutnya yang jelas dan actionable. Ajak meeting/diskusi."
 }}
 
-Respond ONLY with valid JSON."""
+RULES:
+- Buat 2-3 offerings yang PALING RELEVAN untuk klien ini
+- Setiap offering harus punya 3-4 deliverables spesifik
+- Gunakan bahasa yang profesional tapi mudah dipahami
+- Respond ONLY with valid JSON, tanpa backticks atau penjelasan tambahan."""
 
-    result = await call_ai(prompt, model="glm-4", temperature=0.5, max_tokens=1000)
-    
+    result = await call_ai(prompt, model="glm-4", temperature=0.5, max_tokens=1500)
+
     if result["success"]:
         try:
             content = result["content"]
+            # Clean markdown code blocks if present
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
-            return json.loads(content)
-        except:
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+
+            parsed = json.loads(content)
+            # Inject metadata
+            parsed["client_type"] = rtype
+            parsed["greeting"] = greeting
+            return parsed
+        except Exception:
             pass
 
-    return {
-        "summary": f"Kami ingin menawarkan solusi digital terbaik untuk meningkatkan skalabilitas {company}.",
-        "offerings": [
-            "Pembuatan Website Profesional",
-            "Sistem Manajemen Berbasis Cloud",
-            "Optimasi Search Engine (SEO)"
-        ],
-        "pricing_strategy": "Strategi harga fleksibel berdasarkan skala implementasi."
-    }
+    # ── Robust fallback per client type ──
+    if rtype == "islamic":
+        return {
+            "client_type": "islamic",
+            "greeting": greeting,
+            "summary": f"Kami dari Velora Jobs ingin membantu {company} dalam transformasi digital pesantren. Dengan sistem yang tepat, administrasi bisa lebih efisien sehingga waktu bisa lebih difokuskan untuk kegiatan ta'lim dan dakwah.",
+            "problem_analysis": f"Banyak pesantren masih mengandalkan administrasi manual — pencatatan data santri, pembayaran SPP, absensi, hingga surat-menyurat. Hal ini menghabiskan waktu ustadz/ustadzah yang seharusnya bisa digunakan untuk kegiatan belajar-mengajar. {'Belum adanya website resmi juga membuat informasi pesantren sulit dijangkau calon santri.' if not has_website else ''}",
+            "offerings": [
+                {
+                    "title": "Website Resmi Pesantren",
+                    "description": "Landing page informatif dengan pendaftaran santri online",
+                    "deliverables": ["Halaman profil pesantren & visi misi", "Formulir PPDB online", "Galeri kegiatan & berita", "Halaman kontak & lokasi maps"]
+                },
+                {
+                    "title": "Sistem Manajemen Pesantren",
+                    "description": "Platform digital untuk mengelola seluruh administrasi pesantren",
+                    "deliverables": ["Database santri & wali santri", "Sistem pembayaran SPP digital", "Absensi santri digital", "Raport & laporan akademik"]
+                }
+            ],
+            "timeline": "4-6 minggu untuk website, 8-12 minggu untuk sistem manajemen lengkap",
+            "pricing_strategy": "Paket entry mulai dari Rp 3-5 juta untuk website, dengan opsi cicilan. Sistem manajemen disesuaikan skala pesantren.",
+            "why_us": "Velora Jobs berpengalaman membangun sistem untuk lembaga pendidikan Islam. Kami memahami kebutuhan unik pesantren dan berkomitmen memberikan solusi yang sesuai syariat.",
+            "next_steps": "Kami mengundang Ustadz/Ustadzah untuk diskusi 30 menit via Zoom atau kunjungan langsung untuk membahas kebutuhan spesifik pesantren."
+        }
+    elif rtype == "school":
+        return {
+            "client_type": "school",
+            "greeting": greeting,
+            "summary": f"Kami dari Velora Jobs siap membantu {company} dalam modernisasi sistem pendidikan melalui teknologi digital yang mudah digunakan dan efisien.",
+            "problem_analysis": f"Administrasi manual seperti raport, absensi, dan database siswa sering memakan waktu guru yang seharusnya bisa fokus mengajar. {'Tanpa website resmi, sekolah kehilangan kesempatan menarik siswa baru di era digital.' if not has_website else 'Website yang sudah ada bisa dioptimalkan untuk PPDB online dan branding sekolah.'}",
+            "offerings": [
+                {
+                    "title": "Website Sekolah Profesional",
+                    "description": "Website modern dengan fitur PPDB online dan informasi lengkap",
+                    "deliverables": ["Profil sekolah & tenaga pengajar", "Sistem PPDB online", "Portal berita & galeri kegiatan", "Integrasi Google Maps & SEO"]
+                },
+                {
+                    "title": "Sistem Manajemen Sekolah",
+                    "description": "Platform all-in-one untuk administrasi sekolah",
+                    "deliverables": ["e-Raport digital", "Database siswa & guru", "Sistem absensi", "Portal orang tua"]
+                }
+            ],
+            "timeline": "4-6 minggu untuk website, 8-10 minggu untuk sistem manajemen",
+            "pricing_strategy": "Paket disesuaikan dengan skala sekolah. Website mulai dari Rp 4-7 juta, sistem manajemen dari Rp 10-15 juta.",
+            "why_us": "Velora Jobs specialist di bidang EdTech dengan pengalaman membangun sistem manajemen sekolah yang terintegrasi dan mudah digunakan.",
+            "next_steps": "Mari jadwalkan demo 30 menit untuk melihat bagaimana sistem kami bisa membantu efisiensi sekolah Bapak/Ibu."
+        }
+    else:
+        return {
+            "client_type": "business",
+            "greeting": greeting,
+            "summary": f"Kami dari Velora Jobs ingin membantu {company} meningkatkan kehadiran digital dan efisiensi operasional melalui solusi teknologi yang tepat sasaran.",
+            "problem_analysis": f"{'Bisnis Anda belum memiliki website resmi — padahal 87% konsumen Indonesia memeriksa kehadiran online sebelum memutuskan membeli. ' if not has_website else ''}{'Rating Google Maps ' + str(rating) + '/5 bisa ditingkatkan dengan strategi reputasi digital yang tepat. ' if rating and float(rating) < 4.0 else ''}Banyak pelanggan potensial di sekitar lokasi Anda yang bisa dijangkau lebih efektif melalui channel digital.",
+            "offerings": [
+                {
+                    "title": "Website Bisnis Profesional",
+                    "description": "Website modern yang mengkonversi pengunjung menjadi pelanggan",
+                    "deliverables": ["Company profile & portfolio", "Landing page SEO-optimized", "Formulir kontak & WhatsApp integration", "Google Analytics & tracking"]
+                },
+                {
+                    "title": "Optimasi Digital & SEO",
+                    "description": "Tingkatkan visibilitas bisnis Anda di Google dan Maps",
+                    "deliverables": ["Optimasi Google Maps listing", "SEO on-page & content strategy", "Google My Business management", "Laporan performa bulanan"]
+                }
+            ],
+            "timeline": "3-4 minggu untuk website, optimasi SEO ongoing bulanan",
+            "pricing_strategy": "Paket website mulai dari Rp 5-8 juta. Optimasi SEO mulai dari Rp 1-2 juta/bulan.",
+            "why_us": "Velora Jobs menggabungkan desain premium dengan strategi digital yang terukur. Kami fokus pada ROI — setiap rupiah yang Anda investasikan harus menghasilkan pertumbuhan nyata.",
+            "next_steps": "Hubungi kami untuk konsultasi GRATIS 30 menit. Kami akan analisis kebutuhan bisnis Anda dan berikan rekomendasi strategi digital yang tepat."
+        }
 
 
 def keyword_score(

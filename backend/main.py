@@ -1260,9 +1260,11 @@ async def get_stats(db: Session = Depends(get_db), current_user: User = Depends(
     total_sent = sum(c.sent_count or 0 for c in db.query(Campaign).all())
     total_failed = sum(c.failed_count or 0 for c in db.query(Campaign).all())
     
-    # Weekly outreach data (last 7 days)
+    # Weekly outreach data (last 7 days) — WIB timezone
     weekly = []
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    import pytz
+    wib = pytz.timezone('Asia/Jakarta')
+    today = datetime.now(wib).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)
         next_day = day + timedelta(days=1)

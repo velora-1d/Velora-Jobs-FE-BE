@@ -7,6 +7,19 @@ import { api, fetcher, Lead, Prospect } from '@/lib/api';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// Type for the new rich AI proposal content
+interface ProposalContent {
+    client_type: string;
+    greeting: string;
+    summary: string;
+    problem_analysis: string;
+    offerings: { title: string; description: string; deliverables: string[] }[];
+    timeline: string;
+    pricing_strategy: string;
+    why_us: string;
+    next_steps: string;
+}
+
 export default function DocumentsPage() {
     // SWR
     const { data: leadsData } = useSWR<Lead[]>(`${api.API_URL}/api/leads`, fetcher);
@@ -21,6 +34,8 @@ export default function DocumentsPage() {
             location: p.address,
             clientType: 'prospect' as const,
             has_website: p.has_website,
+            rating: p.rating,
+            category: p.category,
             description: `Kategori: ${p.category} | Rating: ${p.rating || 'N/A'}`
         }))
     ].sort((a, b) => b.id - a.id);
@@ -29,7 +44,7 @@ export default function DocumentsPage() {
     const [selectedClientType, setSelectedClientType] = useState<'lead' | 'prospect' | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isAiLoading, setIsAiLoading] = useState(false);
-    const [aiContent, setAiContent] = useState<{ summary: string, offerings: string[], pricing_strategy: string } | null>(null);
+    const [aiContent, setAiContent] = useState<ProposalContent | null>(null);
 
     const handleGenerateAiProposal = async () => {
         const client = combinedClients.find(c => c.id === selectedClientId && c.clientType === selectedClientType);
@@ -53,90 +68,253 @@ export default function DocumentsPage() {
 
         const doc = new jsPDF();
 
-        // Header
-        doc.setFillColor(15, 23, 42); // Slate-900 (Velora Dark)
-        doc.rect(0, 0, 210, 45, 'F');
+        // ═══ PAGE 1: COVER ═══
+        doc.setFillColor(15, 23, 42); // Slate-900
+        doc.rect(0, 0, 210, 297, 'F');
 
+        // Decorative accent line
+        doc.setFillColor(59, 130, 246);
+        doc.rect(0, 0, 6, 297, 'F');
+
+        // Company name
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(24);
+        doc.setFontSize(32);
         doc.setFont('helvetica', 'bold');
-        doc.text('VELORA DIGITAL SOLUTIONS', 20, 25);
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Premium Software Development & Growth Management', 20, 32);
-
-        // Client Info
-        doc.setTextColor(51, 65, 85);
-        doc.setFontSize(9);
-        doc.text('PROPOSAL PREPARED FOR:', 20, 55);
-
-        doc.setTextColor(15, 23, 42);
+        doc.text('VELORA', 25, 80);
         doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${client.title}`, 20, 63);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text('DIGITAL SOLUTIONS', 25, 90);
 
+        // Proposal title
+        doc.setFontSize(28);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(255, 255, 255);
+        doc.text('PROPOSAL', 25, 130);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+
+        const clientType = aiContent?.client_type || 'business';
+        const typeLabel = clientType === 'islamic' ? 'Pesantren / Lembaga Islami'
+            : clientType === 'school' ? 'Lembaga Pendidikan'
+                : 'Solusi Digital Bisnis';
+        doc.text(typeLabel, 25, 140);
+
+        // Divider
+        doc.setDrawColor(100, 116, 139);
+        doc.line(25, 155, 185, 155);
+
+        // Client info
         doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`${client.company}`, 20, 70);
-        doc.text(`${client.location || 'Indonesia'}`, 20, 75);
-
-        doc.setTextColor(51, 65, 85);
-        doc.setFontSize(9);
-        doc.text('DATE:', 150, 55);
-        doc.setTextColor(15, 23, 42);
-        doc.text(`${new Date().toLocaleDateString('id-ID')}`, 150, 60);
-
-        // Executive Summary
-        doc.setDrawColor(226, 232, 240);
-        doc.line(20, 85, 190, 85);
-
-        doc.setFontSize(12);
+        doc.setTextColor(148, 163, 184);
+        doc.text('PREPARED FOR', 25, 170);
+        doc.setFontSize(18);
         doc.setFont('helvetica', 'bold');
-        doc.text('Executive Summary', 20, 95);
+        doc.setTextColor(255, 255, 255);
+        doc.text(`${client.title}`, 25, 180);
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(`${client.company}`, 25, 188);
+        doc.text(`${client.location || 'Indonesia'}`, 25, 195);
 
+        // Date
         doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        const summary = aiContent?.summary || `Kami di Velora Jobs berkomitmen untuk membantu ${client.company} meningkatkan skala bisnis melalui transformasi digital yang tepat sasaran. Berdasarkan analisis awal kami, terdapat peluang besar untuk mengoptimalkan kehadiran digital Anda.`;
-        const splitSummary = doc.splitTextToSize(summary, 170);
-        doc.text(splitSummary, 20, 102);
-
-        // Core Offerings
-        const startYOfferings = 105 + (splitSummary.length * 5);
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Proposed Solutions', 20, startYOfferings);
-
-        const offerings = aiContent?.offerings || [
-            'Professional Web Development (Next.js/React)',
-            'Custom CRM & Management Systems',
-            'Advanced SEO & Digital Branding'
-        ];
-
-        let currentY = startYOfferings + 7;
-        offerings.forEach((off, idx) => {
-            doc.setFillColor(59, 130, 246);
-            doc.circle(23, currentY - 1, 0.8, 'F');
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            doc.text(off, 28, currentY);
-            currentY += 7;
-        });
-
-        // Investment Strategy
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Investment Strategy', 20, currentY + 5);
-
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        const pricing = aiContent?.pricing_strategy || 'Investasi akhir bersifat fleksibel dan akan disesuaikan dengan cakupan fitur serta jangka waktu pengerjaan.';
-        const splitPricing = doc.splitTextToSize(pricing, 170);
-        doc.text(splitPricing, 20, currentY + 12);
+        doc.text(`Tanggal: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, 25, 215);
 
         // Footer
         doc.setFontSize(8);
-        doc.setTextColor(148, 163, 184);
-        doc.text('Generated via Velora AI Engine - Confidential', 105, 285, { align: 'center' });
+        doc.setTextColor(100, 116, 139);
+        doc.text('Dokumen ini bersifat rahasia | Velora Jobs © 2026', 25, 280);
+
+
+        // ═══ PAGE 2: EXECUTIVE SUMMARY & PROBLEM ANALYSIS ═══
+        doc.addPage();
+        let y = 25;
+
+        // Greeting
+        if (aiContent?.greeting) {
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(59, 130, 246);
+            doc.text(aiContent.greeting, 20, y);
+            y += 12;
+        }
+
+        // Executive Summary header
+        doc.setFillColor(59, 130, 246);
+        doc.rect(20, y, 4, 12, 'F');
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        doc.text('Ringkasan Eksekutif', 28, y + 9);
+        y += 20;
+
+        const summary = aiContent?.summary || `Kami di Velora Jobs berkomitmen untuk membantu ${client.company} meningkatkan skala bisnis melalui transformasi digital yang tepat sasaran.`;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(51, 65, 85);
+        const splitSummary = doc.splitTextToSize(summary, 170);
+        doc.text(splitSummary, 20, y);
+        y += splitSummary.length * 5 + 10;
+
+        // Problem Analysis
+        if (aiContent?.problem_analysis) {
+            doc.setFillColor(245, 158, 11);
+            doc.rect(20, y, 4, 12, 'F');
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text('Analisis Kebutuhan', 28, y + 9);
+            y += 20;
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(51, 65, 85);
+            const splitProblem = doc.splitTextToSize(aiContent.problem_analysis, 170);
+            doc.text(splitProblem, 20, y);
+            y += splitProblem.length * 5 + 10;
+        }
+
+
+        // ═══ PAGE 3: PROPOSED SOLUTIONS ═══
+        doc.addPage();
+        y = 25;
+
+        doc.setFillColor(16, 185, 129);
+        doc.rect(20, y, 4, 12, 'F');
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        doc.text('Solusi yang Kami Tawarkan', 28, y + 9);
+        y += 22;
+
+        const offerings = aiContent?.offerings || [
+            { title: 'Website Profesional', description: 'Website modern dan responsif', deliverables: ['Company profile', 'Landing page SEO', 'WhatsApp integration'] },
+            { title: 'Optimasi Digital', description: 'Tingkatkan visibilitas online', deliverables: ['Google Maps listing', 'SEO on-page', 'Analytics tracking'] }
+        ];
+
+        offerings.forEach((off, idx) => {
+            // Offering card
+            doc.setFillColor(248, 250, 252);
+            doc.roundedRect(20, y, 170, 10 + (off.deliverables.length * 6) + 12, 3, 3, 'F');
+
+            // Offering number + title
+            doc.setFillColor(59, 130, 246);
+            doc.circle(28, y + 7, 3, 'F');
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(255, 255, 255);
+            doc.text(`${idx + 1}`, 27, y + 9);
+
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text(off.title, 35, y + 9);
+
+            // Description
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139);
+            doc.text(off.description, 35, y + 16);
+            y += 22;
+
+            // Deliverables
+            off.deliverables.forEach((del) => {
+                doc.setFillColor(16, 185, 129);
+                doc.circle(30, y, 1.2, 'F');
+                doc.setFontSize(9);
+                doc.setTextColor(51, 65, 85);
+                doc.setFont('helvetica', 'normal');
+                doc.text(del, 35, y + 1);
+                y += 6;
+            });
+
+            y += 8;
+        });
+
+
+        // ═══ PAGE 4: TIMELINE, INVESTMENT, WHY US, NEXT STEPS ═══
+        doc.addPage();
+        y = 25;
+
+        // Timeline
+        doc.setFillColor(139, 92, 246);
+        doc.rect(20, y, 4, 12, 'F');
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        doc.text('Timeline Pengerjaan', 28, y + 9);
+        y += 20;
+
+        const timeline = aiContent?.timeline || 'Estimasi 4-8 minggu tergantung skala implementasi.';
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(51, 65, 85);
+        const splitTimeline = doc.splitTextToSize(timeline, 170);
+        doc.text(splitTimeline, 20, y);
+        y += splitTimeline.length * 5 + 15;
+
+        // Investment Strategy
+        doc.setFillColor(16, 185, 129);
+        doc.rect(20, y, 4, 12, 'F');
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        doc.text('Strategi Investasi', 28, y + 9);
+        y += 20;
+
+        const pricing = aiContent?.pricing_strategy || 'Investasi akhir bersifat fleksibel dan disesuaikan dengan cakupan fitur.';
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(51, 65, 85);
+        const splitPricing = doc.splitTextToSize(pricing, 170);
+        doc.text(splitPricing, 20, y);
+        y += splitPricing.length * 5 + 15;
+
+        // Why Us
+        doc.setFillColor(59, 130, 246);
+        doc.rect(20, y, 4, 12, 'F');
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        doc.text('Mengapa Velora Jobs?', 28, y + 9);
+        y += 20;
+
+        const whyUs = aiContent?.why_us || 'Velora Jobs menggabungkan desain premium dengan strategi digital terukur. Fokus kami adalah ROI — setiap rupiah investasi harus menghasilkan pertumbuhan nyata.';
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(51, 65, 85);
+        const splitWhyUs = doc.splitTextToSize(whyUs, 170);
+        doc.text(splitWhyUs, 20, y);
+        y += splitWhyUs.length * 5 + 15;
+
+        // Next Steps
+        doc.setFillColor(245, 158, 11);
+        doc.rect(20, y, 4, 12, 'F');
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        doc.text('Langkah Selanjutnya', 28, y + 9);
+        y += 20;
+
+        const nextSteps = aiContent?.next_steps || 'Hubungi kami untuk konsultasi GRATIS 30 menit.';
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(51, 65, 85);
+        const splitNext = doc.splitTextToSize(nextSteps, 170);
+        doc.text(splitNext, 20, y);
+
+        // Footer on all pages
+        const pageCount = doc.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            doc.setFontSize(7);
+            doc.setTextColor(148, 163, 184);
+            doc.text(`Velora Digital Solutions — Confidential`, 20, 288);
+            doc.text(`Page ${i} of ${pageCount}`, 175, 288);
+        }
 
         const titleSlug = client.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         doc.save(`Velora_Proposal_${titleSlug}.pdf`);
@@ -144,7 +322,6 @@ export default function DocumentsPage() {
     };
 
     const loading = !leadsData && !prospectsData;
-
 
     return (
         <div className="w-full">
@@ -229,7 +406,7 @@ export default function DocumentsPage() {
                                     <h4 className="font-bold text-blue-500 mb-2 flex items-center gap-2">
                                         Velora AI Intel
                                     </h4>
-                                    <p className="text-xs text-muted-foreground mb-4">Generate specialized project breakdown & summary using GLM-4 Intelligence.</p>
+                                    <p className="text-xs text-muted-foreground mb-4">Generate specialized proposal with problem analysis, solutions & deliverables using GLM-4.</p>
 
                                     <button
                                         onClick={handleGenerateAiProposal}
@@ -243,19 +420,63 @@ export default function DocumentsPage() {
 
                                 {aiContent && (
                                     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                        {/* Client Type Badge */}
+                                        <div className="flex items-center gap-2">
+                                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${aiContent.client_type === 'islamic' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                                    aiContent.client_type === 'school' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                                        'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                                }`}>
+                                                {aiContent.client_type === 'islamic' ? '🕌 Pesantren/Islami' :
+                                                    aiContent.client_type === 'school' ? '🏫 Pendidikan' : '💼 Bisnis/UMKM'}
+                                            </span>
+                                        </div>
+
+                                        {/* Executive Summary */}
                                         <div>
-                                            <h5 className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mb-3">AI Executive Summary</h5>
+                                            <h5 className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mb-3">Executive Summary</h5>
                                             <p className="text-xs text-foreground/90 leading-relaxed italic border-l-2 border-blue-500/30 pl-4">{aiContent.summary}</p>
                                         </div>
+
+                                        {/* Problem Analysis */}
                                         <div>
-                                            <h5 className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mb-3">Proposed Services</h5>
-                                            <ul className="space-y-2">
+                                            <h5 className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mb-3">Analisis Kebutuhan</h5>
+                                            <p className="text-xs text-foreground/90 leading-relaxed border-l-2 border-amber-500/30 pl-4">{aiContent.problem_analysis}</p>
+                                        </div>
+
+                                        {/* Offerings with Deliverables */}
+                                        <div>
+                                            <h5 className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mb-3">Proposed Solutions</h5>
+                                            <div className="space-y-3">
                                                 {aiContent.offerings.map((off, i) => (
-                                                    <li key={i} className="text-xs flex items-center gap-2 text-muted-foreground bg-accent/10 p-2 rounded-lg border border-border/30">
-                                                        <CheckSquare className="w-3.5 h-3.5 text-emerald-500" /> {off}
-                                                    </li>
+                                                    <div key={i} className="bg-accent/10 p-3 rounded-xl border border-border/30">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <CheckSquare className="w-3.5 h-3.5 text-emerald-500" />
+                                                            <span className="text-xs font-bold text-foreground">{off.title}</span>
+                                                        </div>
+                                                        <p className="text-[10px] text-muted-foreground mb-2 pl-5">{off.description}</p>
+                                                        <div className="pl-5 space-y-1">
+                                                            {off.deliverables.map((del, j) => (
+                                                                <div key={j} className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                                                                    <div className="w-1 h-1 rounded-full bg-emerald-500" />
+                                                                    {del}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
                                                 ))}
-                                            </ul>
+                                            </div>
+                                        </div>
+
+                                        {/* Timeline & Pricing */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-accent/10 p-3 rounded-xl border border-border/30">
+                                                <h6 className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Timeline</h6>
+                                                <p className="text-[10px] text-foreground/80">{aiContent.timeline}</p>
+                                            </div>
+                                            <div className="bg-accent/10 p-3 rounded-xl border border-border/30">
+                                                <h6 className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Investasi</h6>
+                                                <p className="text-[10px] text-foreground/80">{aiContent.pricing_strategy}</p>
+                                            </div>
                                         </div>
                                     </div>
                                 )}

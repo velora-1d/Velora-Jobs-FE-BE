@@ -448,7 +448,17 @@ export const api = {
         window.URL.revokeObjectURL(url);
     },
 
-    async generateAiProposal(payload: any): Promise<{ summary: string; offerings: string[]; pricing_strategy: string }> {
+    async generateAiProposal(payload: any): Promise<{
+        client_type: string;
+        greeting: string;
+        summary: string;
+        problem_analysis: string;
+        offerings: { title: string; description: string; deliverables: string[] }[];
+        timeline: string;
+        pricing_strategy: string;
+        why_us: string;
+        next_steps: string;
+    }> {
         return authFetch(`${API_URL}/api/ai/proposal`, {
             method: 'POST',
             body: JSON.stringify(payload)
