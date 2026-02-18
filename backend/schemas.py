@@ -165,6 +165,7 @@ class CampaignBase(BaseModel):
     target_criteria: Optional[str] = None # JSON string
     target_type: str = "leads"  # "leads" or "prospects"
     template_id: Optional[int] = None
+    smart_ai: bool = False
     scheduled_at: Optional[datetime] = None
 
 class CampaignCreate(CampaignBase):
@@ -177,6 +178,7 @@ class CampaignUpdate(BaseModel):
     target_criteria: Optional[str] = None
     target_type: Optional[str] = None
     template_id: Optional[int] = None
+    smart_ai: Optional[bool] = None
     scheduled_at: Optional[datetime] = None
 
 class CampaignResponse(CampaignBase, TimestampMixin):
@@ -277,6 +279,8 @@ class SettingsUpdate(BaseModel):
     fonnte_token: Optional[str] = None
     proxy_url: Optional[str] = None
     linkedin_cookie: Optional[str] = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
 
 class WhatsAppSend(BaseModel):
     target: str

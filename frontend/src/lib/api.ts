@@ -260,7 +260,7 @@ export const api = {
     },
 
     async testTelegram(): Promise<{ success: boolean; error?: string }> {
-        return authFetch(`${API_URL}/api/settings/test-telegram`, { method: 'POST' });
+        return authFetch(`${API_URL}/api/telegram/test`, { method: 'POST' });
     },
 
     // ─── WhatsApp ───

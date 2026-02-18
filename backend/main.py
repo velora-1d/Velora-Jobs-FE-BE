@@ -703,7 +703,7 @@ async def delete_prospect(prospect_id: int, db: Session = Depends(get_db), curre
 # ---------------------------------------------------------------------
 
 @app.post("/api/campaigns/{id}/launch")
-async def launch_campaign(id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def launch_campaign(id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if campaign_runner.is_running:
         raise HTTPException(status_code=400, detail="A campaign is already running.")
     
@@ -1669,7 +1669,7 @@ async def export_projects(db: Session = Depends(get_db), current_user: User = De
     writer = csv.writer(output)
     writer.writerow(["ID", "Name", "Client", "Status", "Budget", "Progress", "Deadline", "Created"])
     for p in projects:
-        writer.writerow([p.id, p.name, p.client_name, p.status, p.budget, p.progress, str(p.deadline) if p.deadline else "", str(p.created_at)])
+        writer.writerow([p.id, p.name, p.lead.company if p.lead else "", p.status, p.budget, p.progress, str(p.deadline) if p.deadline else "", str(p.created_at)])
     
     output.seek(0)
     return StreamingResponse(
@@ -1729,7 +1729,6 @@ async def create_campaign(payload: dict, db: Session = Depends(get_db), current_
     )
     db.add(camp)
     db.commit()
-    db.refresh(camp)
     db.refresh(camp)
     return {"id": camp.id, "status": "created"}
 
