@@ -1,19 +1,19 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import useSWR from 'swr';
-import { api, fetcher, FollowUp, Project, Invoice, InvoiceItem, Lead } from '@/lib/api';
+import { api, fetcher, FollowUp, Project, Invoice, InvoiceItem, Lead, Prospect } from '@/lib/api';
 import {
     Plus, Edit, Trash2, Clock, Briefcase, FileText, Download,
     Calendar, DollarSign, Phone as PhoneIcon, Mail, Users, Search,
-    Loader2, CheckCircle2, ChevronDown, Building2, X
+    Loader2, CheckCircle2, ChevronDown, Building2, X, AlertTriangle,
+    CalendarDays, GripVertical, Wand2, TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Pagination } from '@/components/ui/Pagination';
 import { StatusBadge } from '@/components/shared/Badges';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
-import { Wand2 } from 'lucide-react'; // Added Wand2 import
 
 // ─── WA Message Templates ────────────────────────
 const WA_TEMPLATES = [
@@ -75,16 +75,22 @@ function WAModal({ target, onClose, onSuccess, myName }: { target: { name: strin
     const handleAIPersonalize = async () => {
         setPersonalizing(true);
         try {
-            // Mock AI call or real one if prospect
-            // Since target can be lead or prospect, we need to adapt api.personalizeMessage
-            // But verify if api.personalizeMessage accepts generic object?
-            // Usually expects Prospect. Lead might function differently.
-            // For now, simple mock or just use templates.
-            setTimeout(() => {
-                setMessage(prev => prev + "\n\n(AI suggestion: Tambahkan referensi ke kompetitor mereka...)");
-                setPersonalizing(false);
-            }, 1000);
-        } catch (err) {
+            // Fix #2: Real AI personalize call
+            const result = await api.personalizeMessage({
+                id: target.id || 0,
+                name: target.name,
+                category: 'general',
+                phone: target.phone,
+                has_website: false,
+                status: 'new',
+            } as any);
+            if (result?.message) {
+                setMessage(result.message);
+            }
+        } catch {
+            // fallback: append suggestion
+            setMessage(prev => prev + '\n\n💡 (Tip: Sebutkan nama bisnis mereka secara spesifik untuk meningkatkan respons rate)');
+        } finally {
             setPersonalizing(false);
         }
     };
@@ -260,6 +266,7 @@ function FollowUpTab() {
     // SWR
     const { data: itemsData, mutate: mutateItems } = useSWR<FollowUp[]>(`${api.API_URL}/api/followups${queryString}`, fetcher);
     const { data: leadsData } = useSWR<Lead[]>(`${api.API_URL}/api/leads`, fetcher);
+    const { data: prospectsData } = useSWR<Prospect[]>(`${api.API_URL}/api/prospects`, fetcher);
     const { data: settings } = useSWR(`${api.API_URL}/api/settings`, fetcher);
 
     useEffect(() => {
@@ -268,6 +275,7 @@ function FollowUpTab() {
 
     const items = itemsData || [];
     const leads = leadsData || [];
+    const prospects = prospectsData || [];
     const loading = !itemsData;
 
     const applyDateFilter = (days: number | 'all') => {
@@ -330,20 +338,22 @@ function FollowUpTab() {
         setShowAdd(true);
     };
 
-    // Open WA Logic
+    // Fix #1: openWA with prospect phone lookup
     const openWA = (item: FollowUp) => {
-        let phone = '';
-        let name = item.lead_title || item.prospect_name || 'Unknown';
-        let type: 'lead' | 'prospect' = item.lead_id ? 'lead' : 'prospect';
-        let id = item.lead_id || item.prospect_id;
+        const name = item.lead_title || item.prospect_name || 'Unknown';
+        const type: 'lead' | 'prospect' = item.lead_id ? 'lead' : 'prospect';
+        const id = item.lead_id || item.prospect_id;
 
-        // Try to get phone from item properties once backend is updated, or lookup from leads
-        // Casting to any to access potential future properties or existing hidden ones
-        const itemAny = item as any;
-        const phoneToUse = (itemAny.contact_phone || itemAny.lead_phone || (item.lead_id ? leads.find(l => l.id === item.lead_id)?.phone : '')) || '';
+        let phoneToUse = '';
+        if (item.lead_id) {
+            phoneToUse = leads.find(l => l.id === item.lead_id)?.phone || '';
+        } else if (item.prospect_id) {
+            // Fix #1: lookup from prospects data
+            phoneToUse = prospects.find(p => p.id === item.prospect_id)?.phone || '';
+        }
 
         if (!phoneToUse) {
-            alert("No phone number available. Please ensure the contact has a phone number.");
+            alert('Nomor HP tidak tersedia. Pastikan kontak memiliki nomor HP.');
             return;
         }
 
@@ -357,8 +367,18 @@ function FollowUpTab() {
         setForm({ lead_id: 0, prospect_id: 0, type: 'wa', note: '', next_follow_date: '' });
     };
 
+    // Fix #4: auto-update lead status when follow-up marked Done
     const updateItemStatus = async (id: number, status: string) => {
         await api.updateFollowUp(id, { status });
+        if (status === 'done') {
+            const item = items.find(i => i.id === id);
+            if (item?.lead_id) {
+                const lead = leads.find(l => l.id === item.lead_id);
+                if (lead && lead.status === 'contacted') {
+                    await api.updateLead(item.lead_id, { status: 'negotiation' });
+                }
+            }
+        }
         mutateItems();
     };
 
@@ -506,6 +526,11 @@ function FollowUpTab() {
 }
 
 function KanbanColumn({ title, items, onEdit, onDelete, onStatusChange, onSendWA, accent }: any) {
+    // Fix #3: overdue badge
+    const overdueCount = items.filter((i: FollowUp) =>
+        i.status === 'pending' && i.next_follow_date && new Date(i.next_follow_date) < new Date(new Date().toISOString().split('T')[0])
+    ).length;
+
     return (
         <div className="flex-1 min-w-[320px] max-w-[400px] flex flex-col h-full bg-accent/5 border border-border/40 rounded-3xl p-4">
             <div className="flex items-center gap-3 mb-6 px-2">
@@ -513,6 +538,11 @@ function KanbanColumn({ title, items, onEdit, onDelete, onStatusChange, onSendWA
                 <h3 className="font-bold text-foreground flex items-center gap-2">
                     {title}
                     <span className="text-[10px] font-mono bg-accent/20 px-2 py-0.5 rounded-full text-muted-foreground">{items.length}</span>
+                    {overdueCount > 0 && (
+                        <span className="text-[9px] font-bold bg-rose-500/20 text-rose-500 border border-rose-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <AlertTriangle className="w-2.5 h-2.5" /> {overdueCount} overdue
+                        </span>
+                    )}
                 </h3>
             </div>
 
@@ -1094,37 +1124,181 @@ function InvoicesTab() {
 }
 
 // ═══════════════════════════════════════════════════
-// ──── MAIN PIPELINE PAGE ────
+// ──── TIMELINE VIEW (#6) ────
 // ═══════════════════════════════════════════════════
 
-const TABS = [
-    { id: 'followup', label: 'Follow-up', Icon: Clock },
-    { id: 'projects', label: 'Projects', Icon: Briefcase },
-    { id: 'invoices', label: 'Invoices', Icon: FileText },
-];
+function TimelineTab() {
+    const { data: itemsData } = useSWR<FollowUp[]>(`${api.API_URL}/api/followups`, fetcher);
+    const items = itemsData || [];
+    const loading = !itemsData;
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Group by date
+    const grouped = useMemo(() => {
+        const map: Record<string, FollowUp[]> = {};
+        items.filter(i => i.next_follow_date).forEach(i => {
+            const d = i.next_follow_date!.split('T')[0];
+            if (!map[d]) map[d] = [];
+            map[d].push(i);
+        });
+        return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+    }, [items]);
+
+    const typeIcon = (type: string) => {
+        switch (type) {
+            case 'wa': return <WhatsAppIcon className="w-4 h-4 text-emerald-500" />;
+            case 'call': return <PhoneIcon className="w-4 h-4 text-blue-500" />;
+            case 'email': return <Mail className="w-4 h-4 text-purple-500" />;
+            case 'meeting': return <Users className="w-4 h-4 text-amber-500" />;
+            default: return <Clock className="w-4 h-4 text-muted-foreground" />;
+        }
+    };
+
+    if (loading) return <div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mr-3" /> Loading...</div>;
+
+    if (grouped.length === 0) return (
+        <div className="text-center py-20 text-muted-foreground">
+            <CalendarDays className="w-12 h-12 mx-auto mb-4 opacity-30" />
+            <p className="text-lg">Tidak ada follow-up terjadwal.</p>
+            <p className="text-sm mt-1">Tambahkan tanggal follow-up di tab Follow-up.</p>
+        </div>
+    );
+
+    return (
+        <div className="space-y-6 max-w-3xl">
+            {grouped.map(([date, dayItems]) => {
+                const isToday = date === today;
+                const isPast = date < today;
+                const dateObj = new Date(date + 'T00:00:00');
+                const pendingCount = dayItems.filter(i => i.status === 'pending').length;
+
+                return (
+                    <motion.div key={date} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex gap-4">
+                        {/* Date column */}
+                        <div className="flex flex-col items-center">
+                            <div className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center text-center border-2 shrink-0 ${isToday ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/30'
+                                : isPast && pendingCount > 0 ? 'bg-rose-500/10 border-rose-500/40 text-rose-500'
+                                    : 'bg-accent/20 border-border text-muted-foreground'
+                                }`}>
+                                <span className="text-[10px] font-mono leading-none">{dateObj.toLocaleDateString('id-ID', { month: 'short' })}</span>
+                                <span className="text-lg font-black leading-tight">{dateObj.getDate()}</span>
+                            </div>
+                            <div className="w-0.5 flex-1 bg-border/40 mt-2" />
+                        </div>
+
+                        {/* Items */}
+                        <div className="flex-1 pb-6 space-y-2">
+                            <div className="flex items-center gap-2 mb-3">
+                                <span className="text-sm font-bold text-foreground">
+                                    {isToday ? '🔥 Hari Ini' : dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </span>
+                                {isPast && pendingCount > 0 && (
+                                    <span className="text-[9px] font-bold bg-rose-500/20 text-rose-500 border border-rose-500/30 px-2 py-0.5 rounded-full">
+                                        {pendingCount} belum selesai
+                                    </span>
+                                )}
+                            </div>
+                            {dayItems.map(item => (
+                                <div key={item.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${item.status === 'done' ? 'bg-emerald-500/5 border-emerald-500/20 opacity-60'
+                                    : item.status === 'skipped' ? 'bg-muted/20 border-border/40 opacity-50'
+                                        : isPast ? 'bg-rose-500/5 border-rose-500/20'
+                                            : 'bg-card/60 border-border/50 hover:border-blue-500/30'
+                                    }`}>
+                                    <div className="p-1.5 rounded-lg bg-accent/30">{typeIcon(item.type)}</div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-foreground truncate">{item.lead_title || item.prospect_name}</p>
+                                        {item.note && <p className="text-[11px] text-muted-foreground truncate italic">{item.note}</p>}
+                                    </div>
+                                    <span className={`text-[9px] font-bold px-2 py-1 rounded-lg border uppercase ${item.status === 'done' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                                        : item.status === 'skipped' ? 'bg-muted text-muted-foreground border-border'
+                                            : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                        }`}>{item.status}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </motion.div>
+                );
+            })}
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════
+// ──── MAIN PIPELINE PAGE ────
+// ═══════════════════════════════════════════════════
 
 export default function PipelinePage() {
     const [tab, setTab] = useState('followup');
 
+    // Fix #3: overdue count for tab badge
+    const { data: allFollowUps } = useSWR<FollowUp[]>(`${api.API_URL}/api/followups`, fetcher);
+    const today = new Date().toISOString().split('T')[0];
+    const overdueTotal = (allFollowUps || []).filter(i =>
+        i.status === 'pending' && i.next_follow_date && i.next_follow_date.split('T')[0] < today
+    ).length;
+
+    // Fix #8: export follow-ups CSV
+    const exportFollowUps = () => {
+        const items = allFollowUps || [];
+        const header = ['ID', 'Lead/Prospect', 'Type', 'Status', 'Note', 'Next Follow Date', 'Created'];
+        const rows = items.map(i => [
+            i.id,
+            i.lead_title || i.prospect_name || '',
+            i.type,
+            i.status,
+            (i.note || '').replace(/,/g, ';'),
+            i.next_follow_date || '',
+            i.created_at || ''
+        ]);
+        const csv = [header, ...rows].map(r => r.join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'followups_export.csv'; a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const TABS = [
+        { id: 'followup', label: 'Follow-up', Icon: Clock, badge: overdueTotal > 0 ? overdueTotal : 0 },
+        { id: 'timeline', label: 'Timeline', Icon: CalendarDays, badge: 0 },
+        { id: 'projects', label: 'Projects', Icon: Briefcase, badge: 0 },
+        { id: 'invoices', label: 'Invoices', Icon: FileText, badge: 0 },
+    ];
+
     return (
         <div className="w-full">
-            <div className="mb-8">
-                <h1 className="text-4xl font-bold text-foreground tracking-tight flex items-center gap-3">
-                    <Briefcase className="w-8 h-8 text-primary" /> Pipeline
-                </h1>
-                <p className="text-muted-foreground mt-2 text-lg">Manage your follow-ups, projects, and invoices</p>
+            <div className="mb-8 flex items-start justify-between">
+                <div>
+                    <h1 className="text-4xl font-bold text-foreground tracking-tight flex items-center gap-3">
+                        <TrendingUp className="w-8 h-8 text-primary" /> Pipeline
+                    </h1>
+                    <p className="text-muted-foreground mt-2 text-lg">Kelola follow-up, proyek, dan invoice kamu</p>
+                </div>
+                {tab === 'followup' && (
+                    <button onClick={exportFollowUps} className="flex items-center gap-2 px-4 py-2 border border-border text-muted-foreground hover:text-foreground rounded-xl text-sm transition-all">
+                        <Download className="w-4 h-4" /> Export Follow-ups
+                    </button>
+                )}
             </div>
 
-            <div className="bg-accent/20 p-1 rounded-2xl border border-border flex items-center mb-8 w-fit">
+            <div className="bg-accent/20 p-1 rounded-2xl border border-border flex items-center mb-8 w-fit gap-1">
                 {TABS.map(t => (
                     <button key={t.id} onClick={() => setTab(t.id)}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${tab === t.id ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'}`}>
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all relative ${tab === t.id ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'
+                            }`}>
                         <t.Icon className="w-4 h-4" /> {t.label}
+                        {t.badge > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-lg">
+                                {t.badge > 9 ? '9+' : t.badge}
+                            </span>
+                        )}
                     </button>
                 ))}
             </div>
 
             {tab === 'followup' && <FollowUpTab />}
+            {tab === 'timeline' && <TimelineTab />}
             {tab === 'projects' && <ProjectsTab />}
             {tab === 'invoices' && <InvoicesTab />}
         </div>
