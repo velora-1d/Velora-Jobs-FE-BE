@@ -723,7 +723,7 @@ function ProjectsTab() {
     const openEdit = (p: Project) => {
         setEditId(p.id);
         setForm({
-            lead_id: p.lead_id,
+            lead_id: p.lead_id || 0,
             name: p.name,
             description: p.description,
             budget: p.budget ? p.budget.toString() : '',

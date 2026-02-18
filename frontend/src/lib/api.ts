@@ -36,7 +36,8 @@ export interface FollowUp {
 
 export interface Project {
     id: number;
-    lead_id: number;
+    lead_id: number | null;
+    client_name: string | null;
     lead_title: string;
     lead_company: string;
     name: string;
@@ -48,7 +49,21 @@ export interface Project {
     invoice_count: number;
     total_invoiced: number;
     total_paid: number;
+    task_count: number;
+    task_done_count: number;
     created_at: string | null;
+}
+
+export interface Task {
+    id: number;
+    project_id: number;
+    title: string;
+    description: string | null;
+    status: string; // todo, in_progress, done
+    priority: string; // low, medium, high, urgent
+    due_date: string | null;
+    created_at: string | null;
+    updated_at: string | null;
 }
 
 export interface InvoiceItem {
@@ -309,6 +324,24 @@ export const api = {
         return authFetch(`${API_URL}/api/projects/${id}`, { method: 'DELETE' });
     },
 
+    // ─── Tasks ───
+    async getTasks(projectId?: number): Promise<Task[]> {
+        const url = projectId ? `${API_URL}/api/tasks?project_id=${projectId}` : `${API_URL}/api/tasks`;
+        return authFetch(url);
+    },
+
+    async createTask(data: Partial<Task>) {
+        return authFetch(`${API_URL}/api/tasks`, { method: 'POST', body: JSON.stringify(data) });
+    },
+
+    async updateTask(id: number, data: Partial<Task>) {
+        return authFetch(`${API_URL}/api/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+
+    async deleteTask(id: number) {
+        return authFetch(`${API_URL}/api/tasks/${id}`, { method: 'DELETE' });
+    },
+
     // ─── Invoices ───
     async getInvoices(): Promise<Invoice[]> {
         return authFetch(`${API_URL}/api/invoices`);
@@ -451,6 +484,15 @@ export const api = {
         return authFetch(`${API_URL}/api/ai/proposal`, {
             method: 'POST',
             body: JSON.stringify(payload)
+        });
+    },
+
+    async suggestKeywords(industry: string, location: string = 'Indonesia'): Promise<{
+        keywords: { keyword: string; location: string; source: string; reason: string }[]
+    }> {
+        return authFetch(`${API_URL}/api/ai/suggest-keywords`, {
+            method: 'POST',
+            body: JSON.stringify({ industry, location })
         });
     },
 };

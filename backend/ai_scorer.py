@@ -657,3 +657,56 @@ def keyword_score(
         reason = "Bisnis sudah memiliki website (Prioritas Rendah)."
 
     return {"score": score, "reason": reason}
+
+
+async def suggest_keywords(industry: str, location: str = "Indonesia") -> list:
+    """
+    Generate keyword suggestions for scraper using GLM-4.
+    Returns: list of {keyword, location, source, reason}
+    """
+    prompt = f"""Kamu adalah expert digital marketing dan lead generation di Indonesia.
+Berikan 8-10 saran keyword pencarian untuk menemukan prospek bisnis di industri "{industry}" 
+di lokasi "{location}".
+
+Untuk setiap keyword, berikan:
+- keyword: kata kunci pencarian (Google Maps atau LinkedIn)
+- location: lokasi spesifik yang cocok
+- source: "gmaps" atau "linkedin" atau "google"
+- reason: alasan singkat kenapa keyword ini efektif (1 kalimat)
+
+Contoh output (JSON array):
+[
+  {{"keyword": "Pesantren Modern", "location": "Jawa Timur", "source": "gmaps", "reason": "Pesantren modern cenderung butuh sistem informasi digital"}},
+  {{"keyword": "Kepala Sekolah", "location": "Surabaya", "source": "linkedin", "reason": "Decision maker di lembaga pendidikan"}}
+]
+
+PENTING:
+- Keyword harus spesifik dan actionable
+- Variasikan sumber (gmaps, linkedin, google)
+- Fokus pada prospek yang likely butuh jasa digital
+- Output HANYA JSON array, tanpa penjelasan tambahan"""
+
+    result = await call_ai(prompt, model="glm-4", temperature=0.7, max_tokens=1000)
+
+    if not result["success"]:
+        # Fallback: return basic suggestions
+        return [
+            {"keyword": industry.capitalize(), "location": location, "source": "gmaps", "reason": f"Pencarian langsung untuk {industry}"},
+            {"keyword": f"{industry} terdekat", "location": location, "source": "gmaps", "reason": "Pencarian lokal"},
+            {"keyword": f"Owner {industry}", "location": location, "source": "linkedin", "reason": "Decision maker di industri"},
+        ]
+
+    import json
+    try:
+        content = result["content"].strip()
+        # Handle markdown code blocks
+        if "```" in content:
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+        return json.loads(content)
+    except (json.JSONDecodeError, IndexError):
+        return [
+            {"keyword": industry.capitalize(), "location": location, "source": "gmaps", "reason": f"Pencarian langsung untuk {industry}"},
+        ]

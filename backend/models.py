@@ -55,7 +55,8 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
-    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=True, index=True)  # nullable for manual projects
+    client_name = Column(String, nullable=True)  # For external/manual projects without lead
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     status = Column(String, default="negotiation", index=True)  # negotiation, active, completed, cancelled
@@ -67,6 +68,23 @@ class Project(Base):
 
     lead = relationship("Lead", back_populates="projects")
     invoices = relationship("Invoice", back_populates="project", cascade="all, delete-orphan")
+    tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
+
+class Task(Base):
+    """Tasks within a project for tracking work items."""
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String, default="todo", index=True)  # todo, in_progress, done
+    priority = Column(String, default="medium")  # low, medium, high, urgent
+    due_date = Column(Date, nullable=True)
+    created_at = Column(DateTime, default=get_wib_now, index=True)
+    updated_at = Column(DateTime, default=get_wib_now, onupdate=get_wib_now)
+
+    project = relationship("Project", back_populates="tasks")
 
 class Invoice(Base):
     __tablename__ = "invoices"

@@ -939,6 +939,52 @@ async def send_whatsapp(payload: schemas.WhatsAppSend, db: Session = Depends(get
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.post("/api/wa/send-document")
+async def send_wa_document(payload: schemas.WhatsAppSendDocument, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Send a document (PDF) via WhatsApp using Fonnte API."""
+    import httpx
+    from models import Setting
+    
+    target = payload.target
+    if not target or not payload.file:
+        return {"success": False, "error": "target and file required"}
+    
+    fonnte_token = os.getenv("FONNTE_TOKEN", "")
+    if not fonnte_token:
+        settings = {s.key: s.value for s in db.query(Setting).all()}
+        fonnte_token = settings.get("fonnte_token", "")
+    
+    if not fonnte_token:
+        return {"success": False, "error": "Fonnte token not configured."}
+    
+    phone = target.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    if phone.startswith("0"):
+        phone = "62" + phone[1:]
+    if phone.startswith("+"):
+        phone = phone[1:]
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.fonnte.com/send",
+                headers={"Authorization": fonnte_token},
+                data={
+                    "target": phone,
+                    "message": payload.message,
+                    "file": payload.file,
+                    "filename": payload.filename,
+                    "countryCode": "62",
+                },
+            )
+            result = response.json()
+        return {
+            "success": result.get("status", False),
+            "detail": result.get("detail", "Unknown"),
+            "target": phone,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 # ═══════════════════════════════════════════════════
 # ──── FOLLOW-UP API ────
 # ═══════════════════════════════════════════════════
@@ -1094,25 +1140,25 @@ async def delete_followup(fu_id: int, db: Session = Depends(get_db), current_use
 
 @app.get("/api/projects", response_model=List[schemas.ProjectResponse])
 async def get_projects(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    from models import Project, Invoice
+    from models import Project, Invoice, Task
     from sqlalchemy.orm import joinedload
     
-    # Eager load relationships to avoid N+1 queries
     projects = db.query(Project).options(
         joinedload(Project.lead), 
-        joinedload(Project.invoices)
+        joinedload(Project.invoices),
+        joinedload(Project.tasks)
     ).order_by(Project.created_at.desc()).all()
     
     results = []
     for p in projects:
-        # Aggregations
         total_invoiced = sum(i.total for i in p.invoices)
         total_paid = sum(i.total for i in p.invoices if i.status == "paid")
         
         results.append({
             "id": p.id,
             "lead_id": p.lead_id,
-            "lead_title": p.lead.title if p.lead else "Unknown",
+            "client_name": p.client_name,
+            "lead_title": p.lead.title if p.lead else (p.client_name or "Manual Project"),
             "lead_company": p.lead.company if p.lead else "",
             "name": p.name,
             "description": p.description,
@@ -1123,6 +1169,8 @@ async def get_projects(db: Session = Depends(get_db), current_user: User = Depen
             "invoice_count": len(p.invoices),
             "total_invoiced": total_invoiced,
             "total_paid": total_paid,
+            "task_count": len(p.tasks),
+            "task_done_count": len([t for t in p.tasks if t.status == "done"]),
             "created_at": p.created_at,
             "updated_at": p.updated_at
         })
@@ -1132,15 +1180,16 @@ async def get_projects(db: Session = Depends(get_db), current_user: User = Depen
 async def create_project(project_in: schemas.ProjectCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from models import Project, Lead
     
-    lead = db.query(Lead).filter(Lead.id == project_in.lead_id).first()
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    
-    # Update lead status to won
-    lead.status = "won"
+    lead = None
+    if project_in.lead_id:
+        lead = db.query(Lead).filter(Lead.id == project_in.lead_id).first()
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        lead.status = "won"
     
     project = Project(
         lead_id=project_in.lead_id,
+        client_name=project_in.client_name,
         name=project_in.name,
         description=project_in.description,
         status=project_in.status,
@@ -1155,8 +1204,9 @@ async def create_project(project_in: schemas.ProjectCreate, db: Session = Depend
     return {
         "id": project.id,
         "lead_id": project.lead_id,
-        "lead_title": lead.title,
-        "lead_company": lead.company,
+        "client_name": project.client_name,
+        "lead_title": lead.title if lead else (project.client_name or "Manual Project"),
+        "lead_company": lead.company if lead else "",
         "name": project.name,
         "description": project.description,
         "status": project.status,
@@ -1166,6 +1216,8 @@ async def create_project(project_in: schemas.ProjectCreate, db: Session = Depend
         "invoice_count": 0,
         "total_invoiced": 0,
         "total_paid": 0,
+        "task_count": 0,
+        "task_done_count": 0,
         "created_at": project.created_at,
         "updated_at": project.updated_at
     }
@@ -1190,8 +1242,9 @@ async def update_project(project_id: int, project_in: schemas.ProjectUpdate, db:
     return {
         "id": project.id,
         "lead_id": project.lead_id,
-        "lead_title": project.lead.title if project.lead else None,
-        "lead_company": project.lead.company if project.lead else None,
+        "client_name": project.client_name,
+        "lead_title": project.lead.title if project.lead else (project.client_name or "Manual Project"),
+        "lead_company": project.lead.company if project.lead else "",
         "name": project.name,
         "description": project.description,
         "status": project.status,
@@ -1201,6 +1254,8 @@ async def update_project(project_id: int, project_in: schemas.ProjectUpdate, db:
         "invoice_count": len(project.invoices),
         "total_invoiced": sum(i.total for i in project.invoices),
         "total_paid": sum(i.total for i in project.invoices if i.status == "paid"),
+        "task_count": len(project.tasks),
+        "task_done_count": len([t for t in project.tasks if t.status == "done"]),
         "created_at": project.created_at,
         "updated_at": project.updated_at
     }
@@ -1217,6 +1272,52 @@ async def delete_project(project_id: int, db: Session = Depends(get_db), current
     db.query(Invoice).filter(Invoice.project_id == project_id).delete()
     
     db.delete(project)
+    db.commit()
+    return {"status": "deleted"}
+
+# ═══════════════════════════════════════════════════
+# ──── TASK API ────
+# ═══════════════════════════════════════════════════
+
+@app.get("/api/tasks", response_model=List[schemas.TaskResponse])
+async def get_tasks(project_id: int = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Task
+    q = db.query(Task)
+    if project_id:
+        q = q.filter(Task.project_id == project_id)
+    return q.order_by(Task.created_at.desc()).all()
+
+@app.post("/api/tasks", response_model=schemas.TaskResponse)
+async def create_task(task_in: schemas.TaskCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Task, Project
+    project = db.query(Project).filter(Project.id == task_in.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    task = Task(**task_in.dict())
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+
+@app.put("/api/tasks/{task_id}", response_model=schemas.TaskResponse)
+async def update_task(task_id: int, task_in: schemas.TaskUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Task
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    for key, value in task_in.dict(exclude_unset=True).items():
+        setattr(task, key, value)
+    db.commit()
+    db.refresh(task)
+    return task
+
+@app.delete("/api/tasks/{task_id}")
+async def delete_task(task_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from models import Task
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    db.delete(task)
     db.commit()
     return {"status": "deleted"}
 
@@ -1643,6 +1744,17 @@ async def generate_proposal_ai(
     db.commit()
     
     return proposal
+
+
+@app.post("/api/ai/suggest-keywords")
+async def suggest_keywords_endpoint(
+    payload: schemas.KeywordSuggestRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate AI keyword suggestions for the scraper."""
+    from ai_scorer import suggest_keywords
+    keywords = await suggest_keywords(payload.industry, payload.location)
+    return {"keywords": keywords}
 
 
 # --- Telegram ---

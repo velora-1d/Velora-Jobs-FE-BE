@@ -131,6 +131,13 @@ export default function ScraperPage() {
     const [logs, setLogs] = useState<string[]>([]);
     const logsEndRef = React.useRef<HTMLDivElement>(null);
 
+    // AI Suggest state
+    const [showAiSuggest, setShowAiSuggest] = useState(false);
+    const [aiIndustry, setAiIndustry] = useState('');
+    const [aiLocation, setAiLocation] = useState('Indonesia');
+    const [aiSuggestions, setAiSuggestions] = useState<{ keyword: string; location: string; source: string; reason: string }[]>([]);
+    const [aiLoading, setAiLoading] = useState(false);
+
     // Auto-scroll logs
     React.useEffect(() => {
         if (logsEndRef.current) {
@@ -226,6 +233,32 @@ export default function ScraperPage() {
         }
     };
 
+    const handleAiSuggest = async () => {
+        if (!aiIndustry.trim()) return;
+        setAiLoading(true);
+        try {
+            const res = await api.suggestKeywords(aiIndustry, aiLocation);
+            setAiSuggestions(res.keywords || []);
+        } catch (e) {
+            alert('AI suggestion failed. Check your AI API key.');
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const applyAiSuggestion = (s: { keyword: string; location: string; source: string }) => {
+        setKeywords(s.keyword);
+        setLocation(s.location);
+        // Auto-select the suggested source
+        const sourceMap: Record<string, string> = { gmaps: 'gmaps', linkedin: 'linkedin', google: 'gmaps' };
+        const mapped = sourceMap[s.source] || 'gmaps';
+        if (!selectedSources.includes(mapped)) {
+            setSelectedSources(prev => [...prev, mapped]);
+        }
+        setShowAiSuggest(false);
+        setActivePreset(null);
+    };
+
     return (
         <div className="w-full h-full flex flex-col">
             <div className="mb-8">
@@ -286,14 +319,23 @@ export default function ScraperPage() {
                                     <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
                                         <Search className="w-3 h-3 text-blue-500" /> Target Keywords
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={keywords}
-                                        onChange={(e) => { setKeywords(e.target.value); setActivePreset(null); }}
-                                        className="w-full bg-input border border-border rounded-xl py-3 px-5 text-foreground focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-muted-foreground text-base shadow-inner"
-                                        placeholder="e.g. Pesantren, Clinic"
-                                        required
-                                    />
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={keywords}
+                                            onChange={(e) => { setKeywords(e.target.value); setActivePreset(null); }}
+                                            className="flex-1 bg-input border border-border rounded-xl py-3 px-5 text-foreground focus:outline-none focus:border-blue-500/50 transition-all placeholder:text-muted-foreground text-base shadow-inner"
+                                            placeholder="e.g. Pesantren, Clinic"
+                                            required
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAiSuggest(true)}
+                                            className="px-4 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold text-xs flex items-center gap-2 whitespace-nowrap transition-all shadow-lg shadow-purple-500/20 hover:scale-105 active:scale-95"
+                                        >
+                                            <Zap className="w-4 h-4" /> AI Suggest
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="space-y-3">
@@ -464,6 +506,87 @@ export default function ScraperPage() {
                 .custom-terminal::-webkit-scrollbar-thumb { background: #1e1e24; border-radius: 3px; }
                 .custom-terminal::-webkit-scrollbar-thumb:hover { background: #2d2d35; }
             `}</style>
+
+            {/* ─── AI SUGGEST MODAL ─── */}
+            {showAiSuggest && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowAiSuggest(false)}>
+                    <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="p-6 border-b border-border bg-gradient-to-r from-purple-500/10 to-blue-500/10">
+                            <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                                <Zap className="w-5 h-5 text-purple-500" /> AI Keyword Suggestions
+                            </h2>
+                            <p className="text-sm text-muted-foreground mt-1">Let AI suggest the best keywords for your target industry.</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Industry</label>
+                                    <select
+                                        className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-purple-500/40"
+                                        value={aiIndustry}
+                                        onChange={e => setAiIndustry(e.target.value)}
+                                    >
+                                        <option value="" className="bg-popover text-popover-foreground">-- Pilih Industri --</option>
+                                        <option value="pesantren" className="bg-popover text-popover-foreground">Pesantren / Boarding School</option>
+                                        <option value="sekolah" className="bg-popover text-popover-foreground">Sekolah / Education</option>
+                                        <option value="umkm" className="bg-popover text-popover-foreground">UMKM / Small Business</option>
+                                        <option value="klinik" className="bg-popover text-popover-foreground">Klinik / Health</option>
+                                        <option value="startup" className="bg-popover text-popover-foreground">Startup / Tech</option>
+                                        <option value="properti" className="bg-popover text-popover-foreground">Properti / Real Estate</option>
+                                        <option value="fnb" className="bg-popover text-popover-foreground">F&B / Restaurant</option>
+                                        <option value="travel" className="bg-popover text-popover-foreground">Travel / Tourism</option>
+                                        <option value="fashion" className="bg-popover text-popover-foreground">Fashion / Retail</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Location</label>
+                                    <input
+                                        type="text"
+                                        className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-purple-500/40"
+                                        value={aiLocation}
+                                        onChange={e => setAiLocation(e.target.value)}
+                                        placeholder="e.g. Jawa Timur"
+                                    />
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleAiSuggest}
+                                disabled={aiLoading || !aiIndustry}
+                                className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-lg"
+                            >
+                                {aiLoading ? (
+                                    <><Loader2 className="w-4 h-4 animate-spin" /> Generating suggestions...</>
+                                ) : (
+                                    <><Zap className="w-4 h-4" /> Generate Keywords</>
+                                )}
+                            </button>
+
+                            {aiSuggestions.length > 0 && (
+                                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                    <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Click to apply:</p>
+                                    {aiSuggestions.map((s, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => applyAiSuggestion(s)}
+                                            className="w-full text-left p-3 rounded-xl border border-border hover:border-purple-500/40 hover:bg-purple-500/5 transition-all group"
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-bold text-foreground text-sm group-hover:text-purple-400 transition-colors">{s.keyword}</span>
+                                                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md ${s.source === 'gmaps' ? 'bg-red-500/10 text-red-400' : s.source === 'linkedin' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{s.source}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <MapPin className="w-3 h-3 text-muted-foreground" />
+                                                <span className="text-xs text-muted-foreground">{s.location}</span>
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground/70 mt-1">{s.reason}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

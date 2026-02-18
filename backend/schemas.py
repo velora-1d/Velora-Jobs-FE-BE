@@ -96,7 +96,8 @@ class ProjectBase(BaseModel):
     progress: int = 0
 
 class ProjectCreate(ProjectBase):
-    lead_id: int
+    lead_id: Optional[int] = None  # nullable for manual projects
+    client_name: Optional[str] = None  # for external/manual jobs
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
@@ -105,15 +106,44 @@ class ProjectUpdate(BaseModel):
     budget: Optional[float] = None
     deadline: Optional[date] = None
     progress: Optional[int] = None
+    client_name: Optional[str] = None
 
 class ProjectResponse(ProjectBase, TimestampMixin):
     id: int
-    lead_id: int
+    lead_id: Optional[int] = None
+    client_name: Optional[str] = None
     lead_title: Optional[str] = None
     lead_company: Optional[str] = None
     invoice_count: int = 0
     total_invoiced: float = 0
     total_paid: float = 0
+    task_count: int = 0
+    task_done_count: int = 0
+
+# ---------------------------------------------------------------------
+# TASK MODELS
+# ---------------------------------------------------------------------
+
+class TaskBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    status: str = "todo"  # todo, in_progress, done
+    priority: str = "medium"  # low, medium, high, urgent
+    due_date: Optional[date] = None
+
+class TaskCreate(TaskBase):
+    project_id: int
+
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    due_date: Optional[date] = None
+
+class TaskResponse(TaskBase, TimestampMixin):
+    id: int
+    project_id: int
 
 # ---------------------------------------------------------------------
 # INVOICE MODELS
@@ -287,3 +317,13 @@ class WhatsAppSend(BaseModel):
     message: str
     lead_id: Optional[int] = None
     prospect_id: Optional[int] = None
+
+class WhatsAppSendDocument(BaseModel):
+    target: str
+    message: str = ""
+    file: str  # base64 encoded file
+    filename: str = "document.pdf"
+
+class KeywordSuggestRequest(BaseModel):
+    industry: str  # e.g. "pesantren", "umkm", "startup"
+    location: str = "Indonesia"

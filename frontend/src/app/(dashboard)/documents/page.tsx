@@ -2,12 +2,11 @@
 
 import React, { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { FileText, Download, FilePlus, CheckSquare, Sparkles, Loader2, Globe, Building2, Briefcase, Search, Clock, History, X } from 'lucide-react';
+import { FileText, Download, FilePlus, CheckSquare, Sparkles, Loader2, Globe, Building2, Briefcase, Search, Clock, History, Send, Phone, X } from 'lucide-react';
 import { api, fetcher, Lead, Prospect } from '@/lib/api';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
-// Type for the new rich AI proposal content
+// ─── Types ────────────────────────
 interface ProposalContent {
     client_type: string;
     greeting: string;
@@ -32,9 +31,8 @@ interface ProposalHistoryItem {
 }
 
 function getHistory(): ProposalHistoryItem[] {
-    try {
-        return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
-    } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+    catch { return []; }
 }
 
 function addToHistory(item: ProposalHistoryItem) {
@@ -43,32 +41,49 @@ function addToHistory(item: ProposalHistoryItem) {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
 }
 
+// ─── PDF Constants ────────────────────────
+const ML = 25;   // margin left
+const MR = 25;   // margin right
+const MT = 30;   // margin top (body pages)
+const MB = 40;   // margin bottom
+const PW = 210;  // page width A4
+const PH = 297;  // page height A4
+const CW = PW - ML - MR; // content width = 160
+
 export default function DocumentsPage() {
-    // SWR
     const { data: leadsData } = useSWR<Lead[]>(`${api.API_URL}/api/leads`, fetcher);
     const { data: prospectsData } = useSWR<Prospect[]>(`${api.API_URL}/api/prospects`, fetcher);
 
     const combinedClients = useMemo(() => [
         ...(leadsData || []).map(l => ({ ...l, clientType: 'lead' as const })),
         ...(prospectsData || []).map(p => ({
-            id: p.id,
-            title: p.name,
-            company: p.category,
-            location: p.address,
-            clientType: 'prospect' as const,
-            has_website: p.has_website,
-            rating: p.rating,
-            category: p.category,
+            id: p.id, title: p.name, company: p.category, location: p.address,
+            clientType: 'prospect' as const, has_website: p.has_website,
+            rating: p.rating, category: p.category,
             description: `Kategori: ${p.category} | Rating: ${p.rating || 'N/A'}`
         }))
     ].sort((a, b) => b.id - a.id), [leadsData, prospectsData]);
 
-    // ─── Tabs ────────────────────────
+    // ─── State ────────────────────────
     const [activeTab, setActiveTab] = useState<'generate' | 'history'>('generate');
-
-    // ─── Search & Filter ────────────────────────
     const [searchQuery, setSearchQuery] = useState('');
     const [clientFilter, setClientFilter] = useState<'all' | 'lead' | 'prospect'>('all');
+    const [history, setHistory] = useState<ProposalHistoryItem[]>(() => getHistory());
+    const historyIds = new Set(history.map(h => `${h.clientType}-${h.id}`));
+
+    const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
+    const [selectedClientType, setSelectedClientType] = useState<'lead' | 'prospect' | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [isAiLoading, setIsAiLoading] = useState(false);
+    const [aiContent, setAiContent] = useState<ProposalContent | null>(null);
+
+    // WA Send states
+    const [showWaSend, setShowWaSend] = useState(false);
+    const [waPhone, setWaPhone] = useState('');
+    const [waMessage, setWaMessage] = useState('');
+    const [isSendingWa, setIsSendingWa] = useState(false);
+    const [lastPdfBase64, setLastPdfBase64] = useState<string | null>(null);
+    const [lastPdfFilename, setLastPdfFilename] = useState('');
 
     const filteredClients = useMemo(() => {
         return combinedClients.filter(c => {
@@ -80,238 +95,272 @@ export default function DocumentsPage() {
         });
     }, [combinedClients, searchQuery, clientFilter]);
 
-    // ─── History ────────────────────────
-    const [history, setHistory] = useState<ProposalHistoryItem[]>(() => getHistory());
-    const historyIds = new Set(history.map(h => `${h.clientType}-${h.id}`));
-
-    const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
-    const [selectedClientType, setSelectedClientType] = useState<'lead' | 'prospect' | null>(null);
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [isAiLoading, setIsAiLoading] = useState(false);
-    const [aiContent, setAiContent] = useState<ProposalContent | null>(null);
-
     const handleGenerateAiProposal = async () => {
         const client = combinedClients.find(c => c.id === selectedClientId && c.clientType === selectedClientType);
         if (!client) return;
-
         setIsAiLoading(true);
         try {
             const result = await api.generateAiProposal(client);
             setAiContent(result);
-        } catch (e) {
-            alert('AI Generation failed. Falling back to default.');
-        } finally {
-            setIsAiLoading(false);
-        }
+        } catch { alert('AI Generation failed.'); }
+        finally { setIsAiLoading(false); }
     };
 
-    const generateProposal = () => {
+    // ─── PDF Generation (Fixed) ────────────────────────
+    const generateProposal = (downloadOnly = false) => {
         setIsGenerating(true);
         const client = combinedClients.find(c => c.id === selectedClientId && c.clientType === selectedClientType);
-        if (!client) return;
+        if (!client) { setIsGenerating(false); return; }
 
-        const doc = new jsPDF();
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        let y = MT;
 
-        // ═══ PAGE 1: COVER ═══
+        // ─── Helper: auto page break ────────────────────────
+        const checkPage = (needed: number) => {
+            if (y + needed > PH - MB) {
+                doc.addPage();
+                y = MT;
+            }
+        };
+
+        // ─── Helper: draw section header ────────────────────────
+        const sectionHeader = (title: string, color: [number, number, number]) => {
+            checkPage(25);
+            doc.setFillColor(color[0], color[1], color[2]);
+            doc.rect(ML, y, 4, 10, 'F');
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text(title, ML + 8, y + 7);
+            y += 16;
+        };
+
+        // ─── Helper: draw paragraph ────────────────────────
+        const paragraph = (text: string, fontSize = 10) => {
+            doc.setFontSize(fontSize);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(51, 65, 85);
+            const lines = doc.splitTextToSize(text, CW);
+            const lineHeight = fontSize * 0.45;
+            for (let i = 0; i < lines.length; i++) {
+                checkPage(lineHeight + 2);
+                doc.text(lines[i], ML, y);
+                y += lineHeight;
+            }
+            y += 4;
+        };
+
+        // ════════════════════════════════════════════════════
+        // PAGE 1: COVER
+        // ════════════════════════════════════════════════════
         doc.setFillColor(15, 23, 42);
-        doc.rect(0, 0, 210, 297, 'F');
+        doc.rect(0, 0, PW, PH, 'F');
+
+        // Left accent bar
         doc.setFillColor(59, 130, 246);
-        doc.rect(0, 0, 6, 297, 'F');
+        doc.rect(0, 0, 5, PH, 'F');
+
+        // Logo area
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(32);
+        doc.setFontSize(36);
         doc.setFont('helvetica', 'bold');
-        doc.text('VELORA', 25, 80);
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(148, 163, 184);
-        doc.text('DIGITAL SOLUTIONS', 25, 90);
-        doc.setFontSize(28);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(255, 255, 255);
-        doc.text('PROPOSAL', 25, 130);
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(148, 163, 184);
-        const clientType = aiContent?.client_type || 'business';
-        const typeLabel = clientType === 'islamic' ? 'Pesantren / Lembaga Islami'
-            : clientType === 'school' ? 'Lembaga Pendidikan'
-                : 'Solusi Digital Bisnis';
-        doc.text(typeLabel, 25, 140);
-        doc.setDrawColor(100, 116, 139);
-        doc.line(25, 155, 185, 155);
-        doc.setFontSize(11);
-        doc.setTextColor(148, 163, 184);
-        doc.text('PREPARED FOR', 25, 170);
-        doc.setFontSize(18);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(255, 255, 255);
-        doc.text(`${client.title}`, 25, 180);
+        doc.text('VELORA', ML, 75);
+
         doc.setFontSize(12);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(148, 163, 184);
-        doc.text(`${client.company}`, 25, 188);
-        doc.text(`${client.location || 'Indonesia'}`, 25, 195);
-        doc.setFontSize(10);
-        doc.text(`Tanggal: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, 25, 215);
-        doc.setFontSize(8);
-        doc.setTextColor(100, 116, 139);
-        doc.text('Dokumen ini bersifat rahasia | Velora Jobs © 2026', 25, 280);
+        doc.text('DIGITAL SOLUTIONS', ML, 85);
 
-        // ═══ PAGE 2: EXECUTIVE SUMMARY ═══
+        // Divider
+        doc.setDrawColor(75, 85, 99);
+        doc.setLineWidth(0.3);
+        doc.line(ML, 100, PW - MR, 100);
+
+        // Title
+        doc.setFontSize(26);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(255, 255, 255);
+        doc.text('PROPOSAL', ML, 120);
+
+        const clientType = aiContent?.client_type || 'business';
+        const typeLabel = clientType === 'islamic' ? 'Pesantren / Lembaga Islami'
+            : clientType === 'school' ? 'Lembaga Pendidikan' : 'Solusi Digital Bisnis';
+        doc.setFontSize(13);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(typeLabel, ML, 130);
+
+        // Client info block
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text('PREPARED FOR', ML, 160);
+
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(255, 255, 255);
+        const splitName = doc.splitTextToSize(client.title, CW);
+        doc.text(splitName, ML, 172);
+        const nameHeight = splitName.length * 8;
+
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(client.company || '', ML, 172 + nameHeight + 2);
+        doc.text(client.location || 'Indonesia', ML, 172 + nameHeight + 10);
+
+        // Date
+        const dateStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Tanggal: ${dateStr}`, ML, 220);
+
+        // Footer
+        doc.setFontSize(7);
+        doc.setTextColor(75, 85, 99);
+        doc.text('Dokumen ini bersifat rahasia | Velora Jobs © 2026', ML, PH - 15);
+
+        // ════════════════════════════════════════════════════
+        // PAGE 2+: BODY CONTENT
+        // ════════════════════════════════════════════════════
         doc.addPage();
-        let y = 25;
+        y = MT;
+
+        // Greeting
         if (aiContent?.greeting) {
-            doc.setFontSize(12);
+            doc.setFontSize(11);
             doc.setFont('helvetica', 'italic');
             doc.setTextColor(59, 130, 246);
-            doc.text(aiContent.greeting, 20, y);
-            y += 12;
-        }
-        doc.setFillColor(59, 130, 246);
-        doc.rect(20, y, 4, 12, 'F');
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text('Ringkasan Eksekutif', 28, y + 9);
-        y += 20;
-        const summary = aiContent?.summary || `Kami di Velora Jobs berkomitmen untuk membantu ${client.company} meningkatkan skala bisnis melalui transformasi digital yang tepat sasaran.`;
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(51, 65, 85);
-        const splitSummary = doc.splitTextToSize(summary, 170);
-        doc.text(splitSummary, 20, y);
-        y += splitSummary.length * 5 + 10;
-        if (aiContent?.problem_analysis) {
-            doc.setFillColor(245, 158, 11);
-            doc.rect(20, y, 4, 12, 'F');
-            doc.setFontSize(16);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(15, 23, 42);
-            doc.text('Analisis Kebutuhan', 28, y + 9);
-            y += 20;
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(51, 65, 85);
-            const splitProblem = doc.splitTextToSize(aiContent.problem_analysis, 170);
-            doc.text(splitProblem, 20, y);
-            y += splitProblem.length * 5 + 10;
+            const greetLines = doc.splitTextToSize(aiContent.greeting, CW);
+            doc.text(greetLines, ML, y);
+            y += greetLines.length * 5 + 8;
         }
 
-        // ═══ PAGE 3: SOLUTIONS ═══
-        doc.addPage();
-        y = 25;
-        doc.setFillColor(16, 185, 129);
-        doc.rect(20, y, 4, 12, 'F');
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text('Solusi yang Kami Tawarkan', 28, y + 9);
-        y += 22;
+        // ── EXECUTIVE SUMMARY ──
+        sectionHeader('Ringkasan Eksekutif', [59, 130, 246]);
+        const summary = aiContent?.summary || `Kami di Velora Jobs berkomitmen membantu ${client.company || client.title} meningkatkan skala bisnis melalui transformasi digital yang tepat sasaran.`;
+        paragraph(summary);
+
+        // ── PROBLEM ANALYSIS ──
+        if (aiContent?.problem_analysis) {
+            sectionHeader('Analisis Kebutuhan', [245, 158, 11]);
+            paragraph(aiContent.problem_analysis);
+        }
+
+        // ── SOLUTIONS ──
         const offerings = aiContent?.offerings || [
-            { title: 'Website Profesional', description: 'Website modern dan responsif', deliverables: ['Company profile', 'Landing page SEO', 'WhatsApp integration'] },
-            { title: 'Optimasi Digital', description: 'Tingkatkan visibilitas online', deliverables: ['Google Maps listing', 'SEO on-page', 'Analytics tracking'] }
+            { title: 'Website Profesional', description: 'Website modern dan responsif untuk meningkatkan kepercayaan calon pelanggan.', deliverables: ['Company profile', 'Landing page SEO-friendly', 'Integrasi WhatsApp'] },
+            { title: 'Optimasi Digital', description: 'Tingkatkan visibilitas online dan jangkauan digital Anda.', deliverables: ['Google Maps listing', 'SEO on-page', 'Analytics & tracking'] }
         ];
+
+        sectionHeader('Solusi yang Kami Tawarkan', [16, 185, 129]);
+
         offerings.forEach((off, idx) => {
+            const boxH = 18 + off.deliverables.length * 6;
+            checkPage(boxH + 6);
+
+            // Card background
             doc.setFillColor(248, 250, 252);
-            doc.roundedRect(20, y, 170, 10 + (off.deliverables.length * 6) + 12, 3, 3, 'F');
+            doc.roundedRect(ML, y, CW, boxH, 2, 2, 'F');
+
+            // Number badge
             doc.setFillColor(59, 130, 246);
-            doc.circle(28, y + 7, 3, 'F');
+            doc.circle(ML + 8, y + 7, 3, 'F');
             doc.setFontSize(8);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(255, 255, 255);
-            doc.text(`${idx + 1}`, 27, y + 9);
-            doc.setFontSize(12);
+            doc.text(`${idx + 1}`, ML + 6.8, y + 8.5);
+
+            // Title
+            doc.setFontSize(11);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(15, 23, 42);
-            doc.text(off.title, 35, y + 9);
-            doc.setFontSize(9);
+            doc.text(off.title, ML + 15, y + 8.5);
+
+            // Description
+            doc.setFontSize(8.5);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(100, 116, 139);
-            doc.text(off.description, 35, y + 16);
-            y += 22;
+            doc.text(off.description, ML + 15, y + 14);
+
+            // Deliverables
+            let dy = y + 20;
             off.deliverables.forEach((del) => {
                 doc.setFillColor(16, 185, 129);
-                doc.circle(30, y, 1.2, 'F');
-                doc.setFontSize(9);
+                doc.circle(ML + 12, dy - 0.5, 1, 'F');
+                doc.setFontSize(8.5);
                 doc.setTextColor(51, 65, 85);
-                doc.setFont('helvetica', 'normal');
-                doc.text(del, 35, y + 1);
-                y += 6;
+                doc.text(del, ML + 16, dy);
+                dy += 6;
             });
-            y += 8;
+
+            y += boxH + 6;
         });
 
-        // ═══ PAGE 4: TIMELINE, INVESTMENT, WHY US ═══
-        doc.addPage();
-        y = 25;
-        doc.setFillColor(139, 92, 246);
-        doc.rect(20, y, 4, 12, 'F');
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text('Timeline Pengerjaan', 28, y + 9);
-        y += 20;
-        const timeline = aiContent?.timeline || 'Estimasi 4-8 minggu tergantung skala implementasi.';
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(51, 65, 85);
-        const splitTimeline = doc.splitTextToSize(timeline, 170);
-        doc.text(splitTimeline, 20, y);
-        y += splitTimeline.length * 5 + 15;
-        doc.setFillColor(16, 185, 129);
-        doc.rect(20, y, 4, 12, 'F');
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text('Strategi Investasi', 28, y + 9);
-        y += 20;
-        const pricing = aiContent?.pricing_strategy || 'Investasi akhir bersifat fleksibel dan disesuaikan dengan cakupan fitur.';
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(51, 65, 85);
-        const splitPricing = doc.splitTextToSize(pricing, 170);
-        doc.text(splitPricing, 20, y);
-        y += splitPricing.length * 5 + 15;
-        doc.setFillColor(59, 130, 246);
-        doc.rect(20, y, 4, 12, 'F');
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text('Mengapa Velora Jobs?', 28, y + 9);
-        y += 20;
-        const whyUs = aiContent?.why_us || 'Velora Jobs menggabungkan desain premium dengan strategi digital terukur.';
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(51, 65, 85);
-        const splitWhyUs = doc.splitTextToSize(whyUs, 170);
-        doc.text(splitWhyUs, 20, y);
-        y += splitWhyUs.length * 5 + 15;
-        doc.setFillColor(245, 158, 11);
-        doc.rect(20, y, 4, 12, 'F');
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text('Langkah Selanjutnya', 28, y + 9);
-        y += 20;
-        const nextSteps = aiContent?.next_steps || 'Hubungi kami untuk konsultasi GRATIS 30 menit.';
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(51, 65, 85);
-        const splitNext = doc.splitTextToSize(nextSteps, 170);
-        doc.text(splitNext, 20, y);
+        // ── TIMELINE ──
+        sectionHeader('Timeline Pengerjaan', [139, 92, 246]);
+        const timeline = aiContent?.timeline || 'Estimasi pengerjaan 4-8 minggu, tergantung kompleksitas dan skala implementasi yang disepakati.';
+        paragraph(timeline);
 
-        // Footer on all pages
+        // ── PRICING ──
+        sectionHeader('Strategi Investasi', [16, 185, 129]);
+        const pricing = aiContent?.pricing_strategy || 'Investasi bersifat fleksibel dan disesuaikan dengan cakupan fitur yang dipilih. Kami menyediakan opsi pembayaran bertahap untuk kenyamanan Anda.';
+        paragraph(pricing);
+
+        // ── WHY US ──
+        sectionHeader('Mengapa Velora Jobs?', [59, 130, 246]);
+        const whyUs = aiContent?.why_us || 'Velora Jobs menggabungkan desain premium dengan strategi digital terukur. Tim kami berpengalaman membantu UMKM, lembaga pendidikan, dan pesantren bertransformasi digital.';
+        paragraph(whyUs);
+
+        // ── NEXT STEPS ──
+        sectionHeader('Langkah Selanjutnya', [245, 158, 11]);
+        const nextSteps = aiContent?.next_steps || 'Hubungi kami untuk konsultasi GRATIS 30 menit. Kami siap membantu Anda memulai perjalanan transformasi digital.';
+        paragraph(nextSteps);
+
+        // ── Contact CTA box ──
+        checkPage(30);
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(ML, y, CW, 22, 3, 3, 'F');
+        doc.setFillColor(59, 130, 246);
+        doc.roundedRect(ML, y, CW, 22, 3, 3, 'S');
+        doc.setDrawColor(59, 130, 246);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(59, 130, 246);
+        doc.text('Hubungi Kami', ML + CW / 2, y + 9, { align: 'center' });
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text('WhatsApp: 0857-xxxx-xxxx  |  Email: hello@velora.my.id  |  Web: ve-lora.my.id', ML + CW / 2, y + 16, { align: 'center' });
+
+        // ════════════════════════════════════════════════════
+        // FOOTERS on all pages
+        // ════════════════════════════════════════════════════
         const pageCount = doc.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {
             doc.setPage(i);
+            // Footer line
+            doc.setDrawColor(229, 231, 235);
+            doc.setLineWidth(0.3);
+            doc.line(ML, PH - 20, PW - MR, PH - 20);
+            // Footer text
             doc.setFontSize(7);
             doc.setTextColor(148, 163, 184);
-            doc.text(`Velora Digital Solutions — Confidential`, 20, 288);
-            doc.text(`Page ${i} of ${pageCount}`, 175, 288);
+            if (i > 1) { // skip cover page footer text
+                doc.text('Velora Digital Solutions — Confidential', ML, PH - 15);
+                doc.text(`${i - 1} / ${pageCount - 1}`, PW - MR, PH - 15, { align: 'right' });
+            }
         }
 
         const titleSlug = client.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        doc.save(`Velora_Proposal_${titleSlug}.pdf`);
+        const filename = `Velora_Proposal_${titleSlug}.pdf`;
+
+        // Save PDF as base64 for WA sending
+        const pdfBase64 = doc.output('datauristring').split(',')[1];
+        setLastPdfBase64(pdfBase64);
+        setLastPdfFilename(filename);
+
+        // Download
+        doc.save(filename);
 
         // Save to history
         const histItem: ProposalHistoryItem = {
@@ -324,7 +373,39 @@ export default function DocumentsPage() {
         addToHistory(histItem);
         setHistory(getHistory());
 
+        // Pre-fill WA message
+        setWaMessage(`Assalamu'alaikum, berikut proposal dari Velora Jobs untuk ${client.title}. Silakan ditinjau, terima kasih! 🙏`);
+
         setIsGenerating(false);
+    };
+
+    // ─── Send PDF via WA (Fonnte) ────────────────────────
+    const handleSendWA = async () => {
+        if (!waPhone || !lastPdfBase64) return;
+        setIsSendingWa(true);
+        try {
+            const res = await fetch(`${api.API_URL}/api/wa/send-document`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({
+                    target: waPhone,
+                    message: waMessage,
+                    file: lastPdfBase64,
+                    filename: lastPdfFilename,
+                }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('✅ Proposal berhasil dikirim via WhatsApp!');
+                setShowWaSend(false);
+            } else {
+                alert(`❌ Gagal: ${data.error || 'Unknown error'}`);
+            }
+        } catch (e) {
+            alert('❌ Network error. Pastikan backend running.');
+        } finally {
+            setIsSendingWa(false);
+        }
     };
 
     const loading = !leadsData && !prospectsData;
@@ -340,7 +421,6 @@ export default function DocumentsPage() {
                     </h1>
                     <p className="text-muted-foreground mt-1 text-sm">Generate professional PDFs for your leads & prospects</p>
                 </div>
-                {/* Tab switcher */}
                 <div className="bg-accent/20 p-1 rounded-xl border border-border flex items-center">
                     <button onClick={() => setActiveTab('generate')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'generate' ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'}`}>
                         <Sparkles className="w-3.5 h-3.5" /> Generate
@@ -396,18 +476,12 @@ export default function DocumentsPage() {
                             <span className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-sm font-bold border border-blue-500/20">1</span>
                             Target Selection
                         </h2>
-
-                        {/* Search + Filter */}
                         <div className="flex gap-2 mb-4 flex-shrink-0">
                             <div className="relative flex-1">
                                 <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
+                                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                                     placeholder="Cari nama atau kategori..."
-                                    className="w-full bg-input border border-border rounded-xl py-2 pl-9 pr-3 text-sm text-foreground focus:outline-none focus:border-blue-500/30"
-                                />
+                                    className="w-full bg-input border border-border rounded-xl py-2 pl-9 pr-3 text-sm text-foreground focus:outline-none focus:border-blue-500/30" />
                             </div>
                             <div className="bg-accent/20 p-0.5 rounded-xl border border-border flex items-center">
                                 {(['all', 'lead', 'prospect'] as const).map(f => (
@@ -418,7 +492,6 @@ export default function DocumentsPage() {
                                 ))}
                             </div>
                         </div>
-
                         <div className="space-y-2 overflow-y-auto pr-1 flex-1 scrollbar-hide">
                             {loading && <div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /></div>}
                             {!loading && filteredClients.length === 0 && <p className="text-center py-10 text-muted-foreground text-sm">Tidak ada data ditemukan.</p>}
@@ -426,17 +499,11 @@ export default function DocumentsPage() {
                                 const hasProposal = historyIds.has(`${client.clientType}-${client.id}`);
                                 const isSelected = selectedClientId === client.id && selectedClientType === client.clientType;
                                 return (
-                                    <div
-                                        key={`${client.clientType}-${client.id}`}
-                                        onClick={() => {
-                                            setSelectedClientId(client.id);
-                                            setSelectedClientType(client.clientType);
-                                            setAiContent(null);
-                                        }}
+                                    <div key={`${client.clientType}-${client.id}`}
+                                        onClick={() => { setSelectedClientId(client.id); setSelectedClientType(client.clientType); setAiContent(null); }}
                                         className={`p-4 rounded-2xl border-2 transition-all cursor-pointer group active:scale-[0.98] ${isSelected
                                             ? 'bg-blue-600/10 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.15)] text-blue-500'
-                                            : 'bg-accent/10 border-border/30 hover:border-blue-500/30 text-muted-foreground hover:bg-accent/20'}`}
-                                    >
+                                            : 'bg-accent/10 border-border/30 hover:border-blue-500/30 text-muted-foreground hover:bg-accent/20'}`}>
                                         <div className="flex justify-between items-start">
                                             <div className="min-w-0">
                                                 <div className="flex items-center gap-2 mb-1">
@@ -446,11 +513,7 @@ export default function DocumentsPage() {
                                                 <p className="text-[10px] opacity-70 flex items-center gap-1 font-medium"><Building2 className="w-3 h-3" /> {client.company}</p>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">
-                                                {hasProposal && (
-                                                    <span className="text-[9px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">
-                                                        ✓ Proposal
-                                                    </span>
-                                                )}
+                                                {hasProposal && <span className="text-[9px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">✓ Proposal</span>}
                                                 {isSelected && <CheckSquare className="w-4 h-4 text-blue-500" />}
                                             </div>
                                         </div>
@@ -467,18 +530,12 @@ export default function DocumentsPage() {
                                 <span className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-sm font-bold border border-emerald-500/20">2</span>
                                 Proposal Engine
                             </h2>
-                            {aiContent && (
-                                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 text-[10px] font-bold border border-blue-500/20">
-                                    <Sparkles className="w-3 h-3" /> AI READY
-                                </span>
-                            )}
+                            {aiContent && <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 text-[10px] font-bold border border-blue-500/20"><Sparkles className="w-3 h-3" /> AI READY</span>}
                         </div>
 
                         {!selectedClientId ? (
                             <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4">
-                                <div className="p-6 rounded-3xl bg-accent/10 border border-border/50">
-                                    <FilePlus className="w-12 h-12 text-muted-foreground opacity-30" />
-                                </div>
+                                <div className="p-6 rounded-3xl bg-accent/10 border border-border/50"><FilePlus className="w-12 h-12 text-muted-foreground opacity-30" /></div>
                                 <div>
                                     <h3 className="text-lg font-bold text-muted-foreground">Awaiting Target</h3>
                                     <p className="text-sm text-muted-foreground/60 max-w-[200px] mt-1">Select a client from the database to start the proposal engine.</p>
@@ -492,11 +549,8 @@ export default function DocumentsPage() {
                                         <div className="absolute top-0 right-0 p-3 opacity-20"><Sparkles className="w-8 h-8 text-blue-500" /></div>
                                         <h4 className="font-bold text-blue-500 mb-1 text-sm">Velora AI Intel</h4>
                                         <p className="text-xs text-muted-foreground mb-4">Generate specialized proposal with problem analysis, solutions & deliverables using GLM-4.</p>
-                                        <button
-                                            onClick={handleGenerateAiProposal}
-                                            disabled={isAiLoading}
-                                            className={`w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg ${aiContent ? 'bg-blue-600/10 text-blue-500 border border-blue-500/20 hover:bg-blue-600/20' : 'bg-blue-600 text-white hover:bg-blue-500'}`}
-                                        >
+                                        <button onClick={handleGenerateAiProposal} disabled={isAiLoading}
+                                            className={`w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg ${aiContent ? 'bg-blue-600/10 text-blue-500 border border-blue-500/20 hover:bg-blue-600/20' : 'bg-blue-600 text-white hover:bg-blue-500'}`}>
                                             {isAiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                                             {aiContent ? 'REGENERATE DRAFT' : 'GENERATE AI DRAFT'}
                                         </button>
@@ -505,11 +559,8 @@ export default function DocumentsPage() {
                                     {aiContent && (
                                         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                             <div className="flex items-center gap-2">
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${aiContent.client_type === 'islamic' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                                                    aiContent.client_type === 'school' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
-                                                        'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>
-                                                    {aiContent.client_type === 'islamic' ? '🕌 Pesantren/Islami' :
-                                                        aiContent.client_type === 'school' ? '🏫 Pendidikan' : '💼 Bisnis/UMKM'}
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${aiContent.client_type === 'islamic' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : aiContent.client_type === 'school' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>
+                                                    {aiContent.client_type === 'islamic' ? '🕌 Pesantren/Islami' : aiContent.client_type === 'school' ? '🏫 Pendidikan' : '💼 Bisnis/UMKM'}
                                                 </span>
                                             </div>
                                             <div>
@@ -556,16 +607,67 @@ export default function DocumentsPage() {
                                     )}
                                 </div>
 
-                                <button
-                                    onClick={generateProposal}
-                                    disabled={isGenerating || !selectedClientId}
-                                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 rounded-3xl font-bold flex items-center justify-center gap-3 transition-all shadow-[0_20px_40px_-15px_rgba(16,185,129,0.3)] hover:translate-y-[-2px] active:translate-y-[0] disabled:opacity-40 flex-shrink-0"
-                                >
-                                    {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-                                    EXPORT PROPOSAL PDF
-                                </button>
+                                {/* Action Buttons */}
+                                <div className="space-y-3 flex-shrink-0">
+                                    <button onClick={() => generateProposal()} disabled={isGenerating || !selectedClientId}
+                                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 rounded-3xl font-bold flex items-center justify-center gap-3 transition-all shadow-[0_20px_40px_-15px_rgba(16,185,129,0.3)] hover:translate-y-[-2px] active:translate-y-[0] disabled:opacity-40">
+                                        {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                                        EXPORT & DOWNLOAD PDF
+                                    </button>
+
+                                    {lastPdfBase64 && (
+                                        <button onClick={() => setShowWaSend(true)}
+                                            className="w-full bg-[#25D366] hover:bg-[#20ba59] text-white py-3.5 rounded-3xl font-bold flex items-center justify-center gap-3 transition-all shadow-[0_20px_40px_-15px_rgba(37,211,102,0.3)] hover:translate-y-[-2px] active:translate-y-[0]">
+                                            <Send className="w-5 h-5" />
+                                            KIRIM VIA WHATSAPP
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* ─── WA SEND MODAL ─── */}
+            {showWaSend && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowWaSend(false)}>
+                    <div className="bg-card border border-border rounded-3xl p-8 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                                <Send className="w-5 h-5 text-[#25D366]" />
+                                Kirim Proposal via WA
+                            </h3>
+                            <button onClick={() => setShowWaSend(false)} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs text-muted-foreground uppercase tracking-widest mb-2">Nomor WhatsApp</label>
+                                <div className="relative">
+                                    <Phone className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                                    <input type="tel" value={waPhone} onChange={e => setWaPhone(e.target.value)}
+                                        placeholder="08xxxxxxxxxx" className="w-full bg-input border border-border rounded-xl py-3 pl-10 pr-4 text-foreground focus:border-[#25D366]/50 outline-none" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-muted-foreground uppercase tracking-widest mb-2">Pesan</label>
+                                <textarea value={waMessage} onChange={e => setWaMessage(e.target.value)} rows={3}
+                                    className="w-full bg-input border border-border rounded-xl p-3 text-foreground text-sm focus:border-[#25D366]/50 outline-none resize-none" />
+                            </div>
+                            <div className="p-3 bg-muted/30 rounded-xl border border-border/50 flex items-center gap-3">
+                                <FileText className="w-8 h-8 text-red-500 shrink-0" />
+                                <div className="min-w-0">
+                                    <p className="text-xs font-bold text-foreground truncate">{lastPdfFilename}</p>
+                                    <p className="text-[10px] text-muted-foreground">PDF Proposal — siap dikirim</p>
+                                </div>
+                            </div>
+                            <button onClick={handleSendWA} disabled={!waPhone || isSendingWa}
+                                className="w-full bg-[#25D366] hover:bg-[#20ba59] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-40">
+                                {isSendingWa ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                {isSendingWa ? 'Mengirim...' : 'Kirim Sekarang'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
