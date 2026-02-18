@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import useSWR from 'swr';
 import {
     Send, Users, Zap, Plus, X, Edit, Trash2, Calendar, Play, Pause,
-    Search, FileText, Copy, Tag, Rocket, BarChart2, Eye
+    Search, FileText, Copy, Tag, Rocket, BarChart2, Eye, TrendingUp,
+    CheckCircle2, AlertCircle, Sparkles
 } from 'lucide-react';
-import { api, fetcher, Campaign, PromotionTemplate, AITemplate } from '@/lib/api';
+import { api, fetcher, Campaign, PromotionTemplate } from '@/lib/api';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { StatusBadge } from '@/components/shared/Badges';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
@@ -35,6 +36,21 @@ function VariablePicker({ onInsert }: { onInsert: (v: string) => void }) {
     );
 }
 
+// ─── Stats Card ────────────────────────
+function StatCard({ label, value, icon: Icon, color }: { label: string; value: number | string; icon: any; color: string }) {
+    return (
+        <div className={`p-4 rounded-2xl border bg-card flex items-center gap-4 ${color}`}>
+            <div className={`p-2.5 rounded-xl bg-current/10`}>
+                <Icon className="w-5 h-5" />
+            </div>
+            <div>
+                <p className="text-2xl font-bold text-foreground">{value}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest">{label}</p>
+            </div>
+        </div>
+    );
+}
+
 // ─── Template Card ────────────────────────
 function TemplateCard({ t, onEdit, onDelete, onUse }: {
     t: PromotionTemplate; onEdit: () => void; onDelete: () => void; onUse: () => void
@@ -45,14 +61,23 @@ function TemplateCard({ t, onEdit, onDelete, onUse }: {
         umkm: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
         general: 'bg-muted/30 text-muted-foreground border-border',
     };
+    const varCount = (t.content.match(/\{(\w+)\}/g) || []).length;
+    const charCount = t.content.length;
+
     return (
         <div className="p-5 bg-muted/30 border border-border rounded-2xl hover:border-primary/30 transition-all group">
             <div className="flex justify-between items-start mb-3">
                 <div>
                     <h4 className="font-bold text-foreground text-sm">{t.title}</h4>
-                    <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-widest border mt-1 inline-block ${categoryColors[t.category] || categoryColors.general}`}>
-                        {t.category}
-                    </span>
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-widest border ${categoryColors[t.category] || categoryColors.general}`}>
+                            {t.category}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground font-mono">{charCount} chars</span>
+                        {varCount > 0 && (
+                            <span className="text-[9px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded font-mono">{varCount} vars</span>
+                        )}
+                    </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={onUse} className="p-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-all" title="Use in Campaign">
@@ -71,6 +96,74 @@ function TemplateCard({ t, onEdit, onDelete, onUse }: {
     );
 }
 
+// ─── Campaign Card ────────────────────────
+function CampaignCard({ c, isSelected, onClick, onLaunch, onEdit, onDelete }: {
+    c: Campaign; isSelected: boolean; onClick: () => void;
+    onLaunch: () => void; onEdit: () => void; onDelete: () => void;
+}) {
+    const total = (c.sent_count || 0) + (c.failed_count || 0);
+    const rate = total > 0 ? Math.round(((c.sent_count || 0) / total) * 100) : 0;
+
+    return (
+        <div
+            onClick={onClick}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer group relative ${isSelected ? 'bg-primary/10 border-primary/50 shadow-lg shadow-primary/10' : 'bg-muted/20 border-border hover:border-primary/30 hover:bg-muted/30'}`}
+        >
+            <div className="flex justify-between items-start mb-3">
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-sm font-bold truncate ${isSelected ? 'text-primary' : 'text-foreground'}`}>{c.name}</span>
+                        {c.smart_ai && (
+                            <span className="text-[8px] font-bold bg-violet-500/10 text-violet-400 border border-violet-500/20 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shrink-0">
+                                <Sparkles className="w-2 h-2" /> AI
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <StatusBadge status={c.status} />
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <Users className="w-3 h-3" /> {c.target_type || 'leads'}
+                        </span>
+                    </div>
+                </div>
+                {/* Quick Launch */}
+                <button
+                    onClick={e => { e.stopPropagation(); onLaunch(); }}
+                    className="opacity-0 group-hover:opacity-100 p-2 bg-[#25D366] text-white rounded-xl hover:bg-[#20ba59] transition-all shadow-lg shadow-emerald-500/20 shrink-0"
+                    title="Launch"
+                >
+                    <WhatsAppIcon className="w-3.5 h-3.5" />
+                </button>
+            </div>
+
+            {/* Stats row */}
+            <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
+                <span className="flex items-center gap-1 text-emerald-500 font-mono font-bold">
+                    <CheckCircle2 className="w-3 h-3" /> {c.sent_count || 0}
+                </span>
+                <span className="flex items-center gap-1 text-destructive font-mono">
+                    <AlertCircle className="w-3 h-3" /> {c.failed_count || 0}
+                </span>
+                {c.scheduled_at && (
+                    <span className="flex items-center gap-1 ml-auto">
+                        <Calendar className="w-3 h-3" /> {new Date(c.scheduled_at).toLocaleDateString('id-ID')}
+                    </span>
+                )}
+            </div>
+
+            {/* Progress bar */}
+            {total > 0 && (
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all"
+                        style={{ width: `${rate}%` }}
+                    />
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function CampaignsPage() {
     // ─── TABS ────────────────────────
     const [activeTab, setActiveTab] = useState<'campaigns' | 'templates'>('campaigns');
@@ -82,6 +175,11 @@ export default function CampaignsPage() {
     const campaigns = campaignsData || [];
     const templates = templatesData || [];
     const loading = !campaignsData;
+
+    // ─── Global Stats ────────────────────────
+    const totalSent = campaigns.reduce((s, c) => s + (c.sent_count || 0), 0);
+    const totalFailed = campaigns.reduce((s, c) => s + (c.failed_count || 0), 0);
+    const activeCount = campaigns.filter(c => c.status === 'active').length;
 
     // ─── Campaign State ────────────────────────
     const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -97,18 +195,6 @@ export default function CampaignsPage() {
     const [runnerStatus, setRunnerStatus] = useState<any>(null);
     const [isPolling, setIsPolling] = useState(false);
 
-    useEffect(() => {
-        let interval: NodeJS.Timeout;
-        if (isPolling || (runnerStatus && runnerStatus.state === 'running')) {
-            interval = setInterval(async () => {
-                const status = await api.getCampaignStatus();
-                setRunnerStatus(status);
-                if (status.state === 'idle') setIsPolling(false);
-            }, 2000);
-        }
-        return () => clearInterval(interval);
-    }, [isPolling, runnerStatus]);
-
     // ─── Campaign Form ────────────────────────
     const [editId, setEditId] = useState<number | null>(null);
     const [form, setForm] = useState({
@@ -116,6 +202,9 @@ export default function CampaignsPage() {
         target_criteria: 'all', scheduled_at: '', template_id: 0,
         smart_ai: false
     });
+    // Template preview state
+    const [previewTemplateId, setPreviewTemplateId] = useState<number>(0);
+    const previewTemplate = templates.find(t => t.id === previewTemplateId);
 
     const handleSaveCampaign = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -152,23 +241,22 @@ export default function CampaignsPage() {
             template_id: c.template_id || 0,
             smart_ai: c.smart_ai || false
         });
+        setPreviewTemplateId(c.template_id || 0);
         setShowCampaignModal(true);
     };
 
     const openCreateCampaign = () => {
         setEditId(null);
         setForm({ name: '', message_template: '', target_type: 'leads', target_criteria: 'all', scheduled_at: '', template_id: 0, smart_ai: false });
+        setPreviewTemplateId(0);
         setShowCampaignModal(true);
     };
 
     const closeCampaignModal = () => {
         setShowCampaignModal(false);
         setEditId(null);
-        setForm({
-            name: '', message_template: '', target_type: 'leads',
-            target_criteria: 'all', scheduled_at: '', template_id: 0,
-            smart_ai: false
-        });
+        setPreviewTemplateId(0);
+        setForm({ name: '', message_template: '', target_type: 'leads', target_criteria: 'all', scheduled_at: '', template_id: 0, smart_ai: false });
     };
 
     const handleLaunch = async (id: number) => {
@@ -226,6 +314,7 @@ export default function CampaignsPage() {
 
     const handleUseTemplate = (t: PromotionTemplate) => {
         setForm(prev => ({ ...prev, message_template: t.content, template_id: t.id }));
+        setPreviewTemplateId(t.id);
         setActiveTab('campaigns');
         setShowCampaignModal(true);
     };
@@ -281,19 +370,19 @@ export default function CampaignsPage() {
     const handleAIUseTemplate = (content: string) => {
         setTForm(prev => ({ ...prev, content: content }));
         setShowTemplateModal(true);
-        setEditTemplateId(null); // New template
+        setEditTemplateId(null);
     };
 
     return (
-        <div className="w-full h-[calc(100vh-8rem)] flex flex-col">
+        <div className="w-full h-[calc(100vh-8rem)] flex flex-col gap-4">
             {/* ─── HEADER ─── */}
-            <div className="flex flex-col gap-4 mb-6 flex-shrink-0">
+            <div className="flex flex-col gap-4 flex-shrink-0">
                 <div className="flex justify-between items-center">
                     <div>
                         <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
                             <Send className="w-8 h-8 text-primary" /> Campaign Automation
                         </h1>
-                        <p className="text-muted-foreground mt-2">Scale your outreach without getting blocked</p>
+                        <p className="text-muted-foreground mt-1 text-sm">Scale your outreach without getting blocked</p>
                     </div>
                     <div className="flex gap-2">
                         {activeTab === 'templates' && (
@@ -313,6 +402,38 @@ export default function CampaignsPage() {
                                 <Plus className="w-5 h-5" /> New Campaign
                             </button>
                         )}
+                    </div>
+                </div>
+
+                {/* ─── GLOBAL STATS BAR ─── */}
+                <div className="grid grid-cols-4 gap-3">
+                    <div className="p-4 rounded-2xl border border-border bg-card flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-primary/10"><BarChart2 className="w-5 h-5 text-primary" /></div>
+                        <div>
+                            <p className="text-2xl font-bold text-foreground">{campaigns.length}</p>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Total</p>
+                        </div>
+                    </div>
+                    <div className="p-4 rounded-2xl border border-border bg-card flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-emerald-500/10"><TrendingUp className="w-5 h-5 text-emerald-500" /></div>
+                        <div>
+                            <p className="text-2xl font-bold text-emerald-500">{totalSent}</p>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Total Sent</p>
+                        </div>
+                    </div>
+                    <div className="p-4 rounded-2xl border border-border bg-card flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-destructive/10"><AlertCircle className="w-5 h-5 text-destructive" /></div>
+                        <div>
+                            <p className="text-2xl font-bold text-destructive">{totalFailed}</p>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Failed</p>
+                        </div>
+                    </div>
+                    <div className="p-4 rounded-2xl border border-border bg-card flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-blue-500/10"><Zap className="w-5 h-5 text-blue-500" /></div>
+                        <div>
+                            <p className="text-2xl font-bold text-blue-500">{activeCount}</p>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Active Now</p>
+                        </div>
                     </div>
                 </div>
 
@@ -345,7 +466,7 @@ export default function CampaignsPage() {
 
             {/* ─── LIVE CONSOLE ─── */}
             {(runnerStatus && runnerStatus.state !== 'idle') && (
-                <div className="mb-6 p-6 bg-card border border-primary/30 rounded-2xl relative overflow-hidden backdrop-blur-md flex-shrink-0">
+                <div className="mb-2 p-6 bg-card border border-primary/30 rounded-2xl relative overflow-hidden backdrop-blur-md flex-shrink-0">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50 animate-pulse"></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
@@ -419,26 +540,23 @@ export default function CampaignsPage() {
             {activeTab === 'campaigns' && (
                 <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
                     {/* List */}
-                    <div className="lg:col-span-1 bg-card border border-border p-6 rounded-2xl overflow-y-auto flex flex-col">
-                        <h2 className="text-lg font-bold text-foreground mb-4 flex-shrink-0 flex items-center gap-2">
-                            <BarChart2 className="w-5 h-5 text-primary" /> Campaigns <span className="text-sm font-normal text-muted-foreground ml-auto">{filteredCampaigns.length}</span>
+                    <div className="lg:col-span-1 bg-card border border-border p-5 rounded-2xl overflow-y-auto flex flex-col">
+                        <h2 className="text-sm font-bold text-foreground mb-4 flex-shrink-0 flex items-center gap-2">
+                            <BarChart2 className="w-4 h-4 text-primary" /> Campaigns <span className="text-xs font-normal text-muted-foreground ml-auto">{filteredCampaigns.length}</span>
                         </h2>
-                        {loading ? <p className="text-muted-foreground">Loading...</p> : (
+                        {loading ? <p className="text-muted-foreground text-sm">Loading...</p> : (
                             <div className="space-y-3 flex-1">
                                 {filteredCampaigns.length === 0 && <p className="text-muted-foreground text-sm">No campaigns found.</p>}
                                 {filteredCampaigns.map(c => (
-                                    <div key={c.id} onClick={() => setSelectedId(c.id)}
-                                        className={`p-4 rounded-xl border transition-all cursor-pointer group ${selectedId === c.id ? 'bg-primary/10 border-primary/50' : 'bg-muted/30 border-border hover:border-primary/30'}`}>
-                                        <div className="flex justify-between items-start mb-2">
-                                            <span className={`text-sm font-bold ${selectedId === c.id ? 'text-primary' : 'text-foreground'}`}>{c.name}</span>
-                                            <StatusBadge status={c.status} />
-                                        </div>
-                                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                            <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {c.target_type || 'leads'}</span>
-                                            <span className="flex items-center gap-1"><Send className="w-3 h-3" /> {c.sent_count || 0} sent</span>
-                                            {c.scheduled_at && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {new Date(c.scheduled_at).toLocaleDateString()}</span>}
-                                        </div>
-                                    </div>
+                                    <CampaignCard
+                                        key={c.id}
+                                        c={c}
+                                        isSelected={selectedId === c.id}
+                                        onClick={() => setSelectedId(c.id)}
+                                        onLaunch={() => handleLaunch(c.id)}
+                                        onEdit={() => openEditCampaign(c)}
+                                        onDelete={() => handleDelete('campaign', c.id)}
+                                    />
                                 ))}
                             </div>
                         )}
@@ -450,7 +568,14 @@ export default function CampaignsPage() {
                             <div className="h-full flex flex-col">
                                 <div className="flex justify-between items-start mb-6 pb-4 border-b border-border flex-shrink-0">
                                     <div>
-                                        <h2 className="text-2xl font-bold text-foreground mb-2">{selectedCampaign.name}</h2>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <h2 className="text-2xl font-bold text-foreground">{selectedCampaign.name}</h2>
+                                            {selectedCampaign.smart_ai && (
+                                                <span className="text-[10px] font-bold bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                    <Sparkles className="w-3 h-3" /> Smart AI
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="flex items-center gap-3">
                                             <StatusBadge status={selectedCampaign.status} />
                                             <div className="h-4 w-[1px] bg-border"></div>
@@ -553,6 +678,9 @@ export default function CampaignsPage() {
                                         value={form.target_criteria} onChange={e => setForm({ ...form, target_criteria: e.target.value })}>
                                         <option value="all" className="bg-popover text-popover-foreground">All</option>
                                         <option value="high_score" className="bg-popover text-popover-foreground">High Score (&gt;75)</option>
+                                        <option value="low_score" className="bg-popover text-popover-foreground">Low Score (&lt;50)</option>
+                                        <option value="not_contacted" className="bg-popover text-popover-foreground">Belum Dihubungi</option>
+                                        <option value="won" className="bg-popover text-popover-foreground">Won / Closed</option>
                                     </select>
                                 </div>
                                 <div>
@@ -562,7 +690,7 @@ export default function CampaignsPage() {
                                 </div>
                             </div>
 
-                            {/* Template picker */}
+                            {/* Template picker with preview */}
                             {templates.length > 0 && (
                                 <div>
                                     <label className="block text-xs text-muted-foreground uppercase tracking-widest mb-2">Use Template (Optional)</label>
@@ -571,12 +699,20 @@ export default function CampaignsPage() {
                                             const tid = parseInt(e.target.value);
                                             const t = templates.find(t => t.id === tid);
                                             setForm({ ...form, template_id: tid, message_template: t?.content || form.message_template });
+                                            setPreviewTemplateId(tid);
                                         }}>
                                         <option value={0} className="bg-popover text-popover-foreground">— Custom Message —</option>
                                         {templates.map(t => (
                                             <option key={t.id} value={t.id} className="bg-popover text-popover-foreground">{t.title} ({t.category})</option>
                                         ))}
                                     </select>
+                                    {/* Template Preview */}
+                                    {previewTemplate && (
+                                        <div className="mt-2 p-3 bg-muted/30 border border-border/50 rounded-xl">
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Preview: {previewTemplate.title}</p>
+                                            <p className="text-xs text-foreground/80 font-mono whitespace-pre-line line-clamp-4">{previewTemplate.content}</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

@@ -881,7 +881,7 @@ async def send_whatsapp(payload: schemas.WhatsAppSend, db: Session = Depends(get
                     lead.status = "contacted"
                     if not lead.wa_contacted_at:
                         lead.wa_contacted_at = now
-                    # Auto-create FollowUp for Pipeline
+                    # Auto-create FollowUp (done) for Pipeline
                     followup = FollowUp(
                         lead_id=lead_id,
                         type="wa",
@@ -890,6 +890,16 @@ async def send_whatsapp(payload: schemas.WhatsAppSend, db: Session = Depends(get
                         created_at=now
                     )
                     db.add(followup)
+                    # Opsi A: Auto-create pending reminder follow-up (+3 days)
+                    from datetime import date, timedelta
+                    reminder = FollowUp(
+                        lead_id=lead_id,
+                        type="wa",
+                        note="Follow-up reminder — cek respons dari kontak",
+                        status="pending",
+                        next_follow_date=date.today() + timedelta(days=3)
+                    )
+                    db.add(reminder)
                     db.commit()
             
             # Handle Prospect
@@ -900,7 +910,7 @@ async def send_whatsapp(payload: schemas.WhatsAppSend, db: Session = Depends(get
                     prospect.status = "contacted"
                     if not prospect.wa_contacted_at:
                         prospect.wa_contacted_at = now
-                    # Auto-create FollowUp for Pipeline
+                    # Auto-create FollowUp (done) for Pipeline
                     followup = FollowUp(
                         prospect_id=prospect_id,
                         type="wa",
@@ -909,6 +919,16 @@ async def send_whatsapp(payload: schemas.WhatsAppSend, db: Session = Depends(get
                         created_at=now
                     )
                     db.add(followup)
+                    # Opsi A: Auto-create pending reminder follow-up (+3 days)
+                    from datetime import date, timedelta
+                    reminder = FollowUp(
+                        prospect_id=prospect_id,
+                        type="wa",
+                        note="Follow-up reminder — cek respons dari kontak",
+                        status="pending",
+                        next_follow_date=date.today() + timedelta(days=3)
+                    )
+                    db.add(reminder)
                     db.commit()
         
         return {

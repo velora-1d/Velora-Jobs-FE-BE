@@ -7,7 +7,7 @@ import {
     Plus, Edit, Trash2, Clock, Briefcase, FileText, Download,
     Calendar, DollarSign, Phone as PhoneIcon, Mail, Users, Search,
     Loader2, CheckCircle2, ChevronDown, Building2, X, AlertTriangle,
-    CalendarDays, GripVertical, Wand2, TrendingUp
+    CalendarDays, GripVertical, Wand2, TrendingUp, Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -367,7 +367,12 @@ function FollowUpTab() {
         setForm({ lead_id: 0, prospect_id: 0, type: 'wa', note: '', next_follow_date: '' });
     };
 
-    // Fix #4: auto-update lead status when follow-up marked Done
+    // Opsi B: state for schedule next follow-up prompt
+    const [showScheduleNext, setShowScheduleNext] = useState(false);
+    const [scheduleNextFor, setScheduleNextFor] = useState<{ lead_id?: number; prospect_id?: number } | null>(null);
+    const [scheduleNextDate, setScheduleNextDate] = useState('');
+
+    // Fix #4: auto-update lead status when follow-up marked Done + Opsi B prompt
     const updateItemStatus = async (id: number, status: string) => {
         await api.updateFollowUp(id, { status });
         if (status === 'done') {
@@ -378,7 +383,32 @@ function FollowUpTab() {
                     await api.updateLead(item.lead_id, { status: 'negotiation' });
                 }
             }
+            // Opsi B: prompt to schedule next follow-up
+            const item2 = items.find(i => i.id === id);
+            if (item2) {
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 3);
+                setScheduleNextDate(tomorrow.toISOString().split('T')[0]);
+                setScheduleNextFor({
+                    lead_id: item2.lead_id || undefined,
+                    prospect_id: item2.prospect_id || undefined,
+                });
+                setShowScheduleNext(true);
+            }
         }
+        mutateItems();
+    };
+
+    const handleScheduleNext = async () => {
+        if (!scheduleNextFor || !scheduleNextDate) return;
+        await api.createFollowUp({
+            ...scheduleNextFor,
+            type: 'wa',
+            note: 'Follow-up lanjutan',
+            next_follow_date: scheduleNextDate,
+        });
+        setShowScheduleNext(false);
+        setScheduleNextFor(null);
         mutateItems();
     };
 
@@ -521,6 +551,61 @@ function FollowUpTab() {
                 onConfirm={executeDelete}
                 onCancel={() => { setShowConfirm(false); setDeleteId(null); }}
             />
+
+            {/* Opsi B: Schedule Next Follow-up Modal */}
+            <AnimatePresence>
+                {showScheduleNext && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                        onClick={() => setShowScheduleNext(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="bg-card border border-border rounded-3xl p-8 w-full max-w-sm shadow-2xl"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                                    <Bell className="w-5 h-5 text-emerald-500" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-foreground text-base">Follow-up Selesai! 🎉</h3>
+                                    <p className="text-xs text-muted-foreground">Jadwalkan follow-up berikutnya?</p>
+                                </div>
+                            </div>
+                            <div className="my-5">
+                                <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Tanggal Follow-up Berikutnya</label>
+                                <input
+                                    type="date"
+                                    value={scheduleNextDate}
+                                    onChange={e => setScheduleNextDate(e.target.value)}
+                                    className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-emerald-500/50"
+                                />
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowScheduleNext(false)}
+                                    className="flex-1 py-3 rounded-xl border border-border text-muted-foreground hover:text-foreground transition-all text-sm font-bold"
+                                >
+                                    Lewati
+                                </button>
+                                <button
+                                    onClick={handleScheduleNext}
+                                    disabled={!scheduleNextDate}
+                                    className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all disabled:opacity-40 shadow-lg shadow-emerald-500/20"
+                                >
+                                    Tambah Reminder
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
