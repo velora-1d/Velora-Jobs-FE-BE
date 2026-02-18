@@ -9,6 +9,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin123
       POSTGRES_DB: velora_jobs
+      TZ: Asia/Jakarta
     ports:
       - "5435:5432"
     volumes:
@@ -34,6 +35,7 @@ services:
       - ./backend/.env
     environment:
       DATABASE_URL: postgresql://postgres:admin123@db/velora_jobs
+      TZ: Asia/Jakarta
     depends_on:
       - db
     networks:
@@ -52,6 +54,7 @@ services:
       - "3001:3000"
     environment:
       NEXT_PUBLIC_API_URL: https://jobs.ve-lora.my.id
+      TZ: Asia/Jakarta
     depends_on:
       - backend
     networks:

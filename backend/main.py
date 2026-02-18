@@ -601,7 +601,9 @@ async def get_prospects(
     category: str = None,
     status: str = None,
     min_score: int = None,
+    max_score: int = None,
     wa_status: str = None,
+    has_website: str = None,
     search: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -610,9 +612,19 @@ async def get_prospects(
     query = db.query(Prospect)
     
     if start_date:
-        query = query.filter(Prospect.created_at >= datetime.fromisoformat(start_date))
+        try:
+            start_dt = datetime.fromisoformat(start_date)
+            start_dt = datetime.combine(start_dt.date(), time.min)
+            query = query.filter(Prospect.created_at >= start_dt)
+        except ValueError:
+            pass
     if end_date:
-        query = query.filter(Prospect.created_at <= datetime.fromisoformat(end_date + "T23:59:59"))
+        try:
+            end_dt = datetime.fromisoformat(end_date)
+            end_dt = datetime.combine(end_dt.date(), time.max)
+            query = query.filter(Prospect.created_at <= end_dt)
+        except ValueError:
+            pass
     if category and category != "all":
         query = query.filter(Prospect.category.ilike(f"%{category}%"))
     if status and status != "all":
@@ -620,6 +632,14 @@ async def get_prospects(
 
     if min_score is not None:
         query = query.filter(Prospect.match_score >= min_score)
+    if max_score is not None:
+        query = query.filter(Prospect.match_score <= max_score)
+
+    if has_website and has_website != 'all':
+        if has_website == 'yes':
+            query = query.filter(Prospect.has_website == True)
+        elif has_website == 'no':
+            query = query.filter(Prospect.has_website == False)
 
     if wa_status:
         if wa_status == 'contacted':

@@ -665,7 +665,7 @@ function ProjectsTab() {
     const [editId, setEditId] = useState<number | null>(null);
     const [showConfirm, setShowConfirm] = useState(false);
     const [deleteId, setDeleteId] = useState<number | null>(null);
-    const [form, setForm] = useState({ lead_id: 0, name: '', description: '', budget: '', deadline: '' });
+    const [form, setForm] = useState({ lead_id: 0, client_name: '', name: '', description: '', budget: '', deadline: '' });
 
     // Filters
     const [filterStatus, setFilterStatus] = useState('all');
@@ -682,7 +682,9 @@ function ProjectsTab() {
     const loading = !projectsData;
 
     const handleSave = async () => {
-        if (!form.lead_id || !form.name) return;
+        // Must have either a lead_id OR client_name, plus a project name
+        if (!form.name) return;
+        if (!form.lead_id && !form.client_name.trim()) return;
         try {
             if (editId) {
                 await api.updateProject(editId, {
@@ -693,7 +695,8 @@ function ProjectsTab() {
                 });
             } else {
                 await api.createProject({
-                    lead_id: form.lead_id,
+                    lead_id: form.lead_id || undefined,
+                    client_name: form.lead_id ? undefined : form.client_name.trim(),
                     name: form.name,
                     description: form.description,
                     budget: form.budget ? parseFloat(form.budget) : undefined,
@@ -724,6 +727,7 @@ function ProjectsTab() {
         setEditId(p.id);
         setForm({
             lead_id: p.lead_id || 0,
+            client_name: p.client_name || '',
             name: p.name,
             description: p.description,
             budget: p.budget ? p.budget.toString() : '',
@@ -735,7 +739,7 @@ function ProjectsTab() {
     const closeModal = () => {
         setShowAdd(false);
         setEditId(null);
-        setForm({ lead_id: 0, name: '', description: '', budget: '', deadline: '' });
+        setForm({ lead_id: 0, client_name: '', name: '', description: '', budget: '', deadline: '' });
     };
 
     const updateProgress = async (id: number, progress: number) => {
@@ -762,7 +766,8 @@ function ProjectsTab() {
             const matchStatus = filterStatus === 'all' || p.status === filterStatus;
             const matchSearch = !searchQuery
                 || p.name.toLowerCase().includes(searchQuery.toLowerCase())
-                || (p.lead_company || '').toLowerCase().includes(searchQuery.toLowerCase());
+                || (p.lead_company || '').toLowerCase().includes(searchQuery.toLowerCase())
+                || (p.client_name || '').toLowerCase().includes(searchQuery.toLowerCase());
             return matchStatus && matchSearch;
         });
     }, [projects, filterStatus, searchQuery]);
@@ -773,6 +778,9 @@ function ProjectsTab() {
         const start = (currentPage - 1) * pageSize;
         return filteredProjects.slice(start, start + pageSize);
     }, [filteredProjects, currentPage, pageSize]);
+
+    // Check if save is valid
+    const canSave = form.name.trim() && (form.lead_id > 0 || form.client_name.trim());
 
     if (loading) return <div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mr-3" /> Loading...</div>;
 
@@ -803,19 +811,38 @@ function ProjectsTab() {
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeModal}>
                     <div className="bg-popover border border-border rounded-2xl w-full max-w-lg p-6 space-y-5" onClick={e => e.stopPropagation()}>
                         <h3 className="text-popover-foreground font-bold text-lg flex items-center gap-2">{editId ? <Edit className="w-5 h-5 text-primary" /> : <Briefcase className="w-5 h-5 text-primary" />} {editId ? 'Edit Project' : 'New Project'}</h3>
+
+                        {/* Lead selection OR manual client name */}
                         <div>
-                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Lead / Client</label>
-                            <select value={form.lead_id} onChange={e => setForm({ ...form, lead_id: +e.target.value })} disabled={!!editId}
+                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Lead (opsional — pilih dari leads)</label>
+                            <select value={form.lead_id} onChange={e => setForm({ ...form, lead_id: +e.target.value, client_name: +e.target.value > 0 ? '' : form.client_name })} disabled={!!editId}
                                 className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-primary/50">
-                                <option value={0} className="bg-popover">Select lead...</option>
+                                <option value={0} className="bg-popover">— Tanpa Lead (Manual) —</option>
                                 {leads.map(l => <option key={l.id} value={l.id} className="bg-popover">{l.title} — {l.company}</option>)}
                             </select>
                         </div>
+
+                        {/* Show client name input when no lead selected */}
+                        {!form.lead_id && (
+                            <div>
+                                <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Nama Client / Perusahaan *</label>
+                                <input type="text" value={form.client_name} onChange={e => setForm({ ...form, client_name: e.target.value })}
+                                    className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-primary/50"
+                                    placeholder="e.g. PT. Maju Bersama, Pondok Pesantren Al-Amin" />
+                            </div>
+                        )}
+
                         <div>
-                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Project Name</label>
+                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Project Name *</label>
                             <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
                                 className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-primary/50"
                                 placeholder="e.g. Website Pesantren Al-Ihsan" />
+                        </div>
+                        <div>
+                            <label className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2 block">Deskripsi</label>
+                            <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+                                className="w-full bg-input border border-border rounded-xl py-3 px-4 text-foreground focus:outline-none focus:border-primary/50 min-h-[80px] resize-none"
+                                placeholder="Brief description..." />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -831,7 +858,7 @@ function ProjectsTab() {
                         </div>
                         <div className="flex gap-3 justify-end">
                             <button onClick={closeModal} className="px-5 py-2.5 rounded-xl border border-border text-muted-foreground hover:text-foreground transition-all text-sm">Cancel</button>
-                            <button onClick={handleSave} disabled={!form.lead_id || !form.name} className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm disabled:opacity-40 transition-all">Save</button>
+                            <button onClick={handleSave} disabled={!canSave} className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm disabled:opacity-40 transition-all">Save</button>
                         </div>
                     </div>
                 </div>

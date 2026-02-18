@@ -226,17 +226,7 @@ export default function ProspectsPage() {
     if (filterCategory !== 'all') params.append('category', filterCategory);
     if (filterStatus !== 'all') params.append('status', filterStatus);
     if (filterWaStatus !== 'all') params.append('wa_status', filterWaStatus);
-    // Website filter not supported by backend yet, or partially? 
-    // Backend doesn't have has_website filter, only search. 
-    // I need to add website filter to backend if I want it. 
-    // For now, I will skip website filter or add it to backend.
-    // Let's check backend... get_prospects doesn't have has_website.
-    // I will add it to backend later or client filter it?
-    // Mixed approach: Server filter what we can, client filter the rest?
-    // No, pagination will be broken.
-    // I should add has_website to backend.
-    // BUT, I'll stick to what I have in backend (search, status, category, score, wa_status).
-    // I will COMMENT OUT website filter param for now or ignore it.
+    if (filterWebsite !== 'all') params.append('has_website', filterWebsite === 'has_website' ? 'yes' : 'no');
 
     if (filterScore !== 'all') {
         if (filterScore === 'high') params.append('min_score', '75');
